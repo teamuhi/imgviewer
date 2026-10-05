@@ -8,6 +8,7 @@
 #include <QMimeData>
 #include <QUrl>
 #include <QScrollBar>
+#include <QLineF>
 #include <QtMath>
 
 namespace {
@@ -44,6 +45,9 @@ bool CollageView::isViewMode() const {
 // view mode: dragging empty space pans the (zoomed) collage, edit mode: rubber band selection
 void CollageView::applyDragMode() {
     setDragMode(mViewMode ? QGraphicsView::ScrollHandDrag : QGraphicsView::RubberBandDrag);
+    // the view-mode background is pinned to the viewport (not the scene), so Qt's scroll-by-blit
+    // would smear it whenever the view pans; repaint everything instead
+    setViewportUpdateMode(mViewMode ? QGraphicsView::FullViewportUpdate : QGraphicsView::SmartViewportUpdate);
 }
 
 void CollageView::setViewMode(bool mode) {
@@ -70,6 +74,28 @@ CollageItem *CollageView::itemUnderCursor(const QPoint &pos) const {
 
 void CollageView::viewScaleChanged() {
     mScene->setViewScale(transform().m11());
+    emit viewMoved();
+}
+
+// Freehand: keep the scene bigger than what is on screen so the canvas can be dragged anywhere, at any zoom
+void CollageView::ensurePanRoom() {
+    if(mGrowing || !mViewMode || !mScene->isFreeView())
+        return;
+    mGrowing = true;
+    QPoint centerPx = viewport()->rect().center();
+    QPointF before = mapToScene(centerPx);
+    mScene->growSceneRect(mapToScene(viewport()->rect()).boundingRect());
+    // a changed scene rect can shift the scroll bars: keep what the user is looking at where it is
+    QPointF after = mapToScene(centerPx);
+    if(QLineF(before, after).length() > 0.01)
+        centerOn(before);
+    mGrowing = false;
+}
+
+void CollageView::scrollContentsBy(int dx, int dy) {
+    QGraphicsView::scrollContentsBy(dx, dy);
+    ensurePanRoom();
+    emit viewMoved();
 }
 
 void CollageView::fitCanvas() {
@@ -77,7 +103,9 @@ void CollageView::fitCanvas() {
     if(mViewMode) {
         // scene == viewport, identity shows the whole collage
         resetTransform();
+        centerOn(mScene->canvasRect().center()); // Freehand's scene is larger than the window
         viewScaleChanged();
+        ensurePanRoom();
         return;
     }
     QRectF target = mScene->canvasRect();
@@ -102,6 +130,7 @@ void CollageView::zoomBy(qreal factor) {
     qreal applied = target / current;
     scale(applied, applied);
     viewScaleChanged();
+    ensurePanRoom();
 }
 
 void CollageView::resizeEvent(QResizeEvent *event) {
@@ -179,6 +208,10 @@ void CollageView::mouseMoveEvent(QMouseEvent *event) {
         event->accept();
         return;
     }
+    // dragging empty space pans: from now on a resize keeps the position instead of re-fitting
+    if(mViewMode && (event->buttons() & Qt::LeftButton) && dragMode() == QGraphicsView::ScrollHandDrag
+       && !mScene->mouseGrabberItem())
+        mAutoFit = false;
     QGraphicsView::mouseMoveEvent(event);
 }
 

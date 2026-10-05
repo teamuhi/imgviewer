@@ -722,7 +722,11 @@ void MW::showWindowed() {
     if(isFullScreen())
         QWidget::showNormal();
     restoreWindowGeometry();
-    QWidget::show();
+    // show maximized directly; show() on a hidden window flashes the normal-sized one first
+    if(settings->maximizedWindow())
+        QWidget::showMaximized();
+    else
+        QWidget::show();
     // try to repaint sooner
     qApp->processEvents();
     emit fullscreenStateChanged(false);

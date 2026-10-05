@@ -91,7 +91,7 @@ Only a few shortcuts work while the collage is open (open, settings, fullscreen,
 | Action (collage view) | Shortcut |
 | ------------- | ------------- |
 | Zoom the whole collage | MouseWheel |
-| Pan the whole collage | Drag empty space / MiddleMouse drag |
+| Pan the whole collage (Freehand: endless canvas, pans at any zoom) | Drag empty space / MiddleMouse drag |
 | Move the picture inside its tile | Drag the tile (Alt+drag also works) |
 | Zoom the picture inside its tile | Shift+MouseWheel over the tile |
 | Swap two tiles | Ctrl+drag a tile onto another |
@@ -99,7 +99,7 @@ Only a few shortcuts work while the collage is open (open, settings, fullscreen,
 | Back (editor -> collage view -> image viewer) | Esc (when no tile is selected) |
 | Tile settings (aspect, size, crop, resolution) | Right click a tile |
 | Select previous / next tile | Left / Right arrow (Freehand layout: nudge the tile, Shift = 10 px) |
-| Place tiles yourself | Layout -> Freehand: drag a tile, drag the handles to resize (Shift keeps proportions), Alt+drag moves the picture, Page Up / Page Down = front / back |
+| Place tiles yourself | Layout -> Freehand: drag a tile, drag the handles to resize (Shift keeps proportions), Alt+drag moves the picture, Page Up / Page Down = front / back, Ctrl+0 = back to the centre |
 | Play / pause the selected animated tile (none selected: all) | Space |
 | Remove tile | Delete |
 | Switch to editor / back to view | E |

@@ -1233,19 +1233,53 @@ CollageWidget {
     background-color: %folderview%;
 }
 
-[accessibleName="CollageToolbar"],
-[accessibleName="CollagePanel"],
-[accessibleName="CollagePanelScroll"] {
-    background-color: %widget%;
-}
-
 [accessibleName="CollageToolbar"] {
+    background-color: %widget%;
     border-bottom: 1px solid %widget_border%;
 }
 
+/* the floating panel paints its own blurred, tinted card (CollagePanelFrame), so everything inside stays transparent */
+[accessibleName="CollagePanelContainer"],
+[accessibleName="CollagePanel"],
 [accessibleName="CollagePanelScroll"] {
+    background-color: transparent;
     border: none;
-    border-left: 1px solid %widget_border%;
+}
+
+[accessibleName="CollagePanelSeparator"] {
+    background-color: %widget_border%;
+    border: none;
+}
+
+[accessibleName="CollageSectionTitle"] {
+    color: %text_lc%;
+    font-weight: bold;
+    padding-top: 8px;
+}
+
+[accessibleName="CollagePanelContainer"] QPushButton,
+[accessibleName="CollagePanel"] QPushButton {
+    padding: 6px 12px;
+    min-height: 18px;
+}
+
+[accessibleName="CollagePanel"] QSpinBox,
+[accessibleName="CollagePanel"] QComboBox {
+    min-height: 22px;
+    padding: 3px 8px;
+}
+
+[accessibleName="CollagePanel"] QPushButton[danger="true"] {
+    color: #e06464;
+}
+
+[accessibleName="CollagePanel"] QPushButton[danger="true"]:hover {
+    border-color: #e06464;
+}
+
+[accessibleName="CollagePanel"] QPushButton[danger="true"]:disabled {
+    color: %text_lc2%;
+    border-color: %widget_border%;
 }
 
 [accessibleName="CollageStatus"] {

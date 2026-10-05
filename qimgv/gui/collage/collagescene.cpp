@@ -52,8 +52,9 @@ void CollageScene::setCanvasColor(const QColor &color) {
 
 void CollageScene::updateSceneRect() {
     if(mMode == CollageMode::View) {
-        // the view area is the whole world: panning a zoomed collage stays inside it
-        setSceneRect(canvasRect());
+        // the view area is the whole world: panning a zoomed collage stays inside it.
+        // Freehand has room around it so the canvas can be moved freely
+        setSceneRect(isFreeView() ? freeWorldRect() : canvasRect());
         return;
     }
     // room around the canvas so items can be parked outside of it
@@ -188,6 +189,7 @@ void CollageScene::setViewLayout(CollageLayout::Mode mode) {
     bool free = isFreeView();
     for(CollageItem *item : mById)
         item->setFreePlacement(free);
+    updateSceneRect();
     relayoutView();
 }
 
@@ -299,9 +301,24 @@ void CollageScene::storeFreeRects() {
         storeFreeRect(item);
 }
 
-// keeps a minimum part of the frame inside the window so a tile can never get lost
+QRectF CollageScene::freeWorldRect() const {
+    qreal room = qMax(mViewArea.width(), mViewArea.height()) * 2.0;
+    return QRectF(QPointF(0, 0), mViewArea).adjusted(-room, -room, room, room);
+}
+
+// keeps the scene a full window larger than the visible part on every side, so panning never hits an edge
+void CollageScene::growSceneRect(const QRectF &visible) {
+    if(!isFreeView() || visible.isEmpty())
+        return;
+    qreal w = visible.width(), h = visible.height();
+    if(sceneRect().contains(visible.adjusted(-w, -h, w, h)))
+        return;
+    setSceneRect(sceneRect().united(visible.adjusted(-2 * w, -2 * h, 2 * w, 2 * h)));
+}
+
+// keeps a minimum part of the frame inside the world so a tile can never get lost
 QPointF CollageScene::clampToView(const CollageItem *item, const QPointF &pos) const {
-    QRectF area = canvasRect();
+    QRectF area = isFreeView() ? freeWorldRect() : canvasRect();
     QSizeF size = item->frameSize();
     qreal keepX = qMin<qreal>(40.0 / mViewScale, size.width());
     qreal keepY = qMin<qreal>(40.0 / mViewScale, size.height());

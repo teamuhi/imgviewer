@@ -18,6 +18,9 @@
 #include <QPair>
 #include <QStyle>
 #include <QPainter>
+#include <QPainterPath>
+#include <QImage>
+#include <QGraphicsScene>
 #include <QIcon>
 #include "settings.h"
 #include "utils/imagelib.h"
@@ -46,7 +49,12 @@ const int VIEW_ASPECT_COUNT = sizeof(VIEW_ASPECTS) / sizeof(VIEW_ASPECTS[0]);
 // the overlay bar shows up when the cursor is this close to the top edge
 const int OVERLAY_TRIGGER = 70;
 
-const int PANEL_WIDTH = 290;
+const int PANEL_WIDTH = 320;
+// gap between the floating panel and the edges of the view
+const int PANEL_MARGIN = 10;
+// the floating bar only makes room for the panel when this much width is left next to it
+const int BAR_MIN_WIDTH = 360;
+const int BACKDROP_INTERVAL = 40;
 // below this width the properties panel starts hidden
 const int NARROW_WIDTH = 900;
 const qint64 MEMORY_WARNING = 1024LL * 1024 * 1024;
@@ -76,10 +84,55 @@ QIcon themedIcon(const QString &iconName) {
     return QIcon(result);
 }
 
+// cheap blur without extra libraries: a smooth round trip through a tiny copy of the image
+QPixmap blurred(const QPixmap &source) {
+    QImage image = source.toImage();
+    const QSize full = image.size();
+    if(full.isEmpty())
+        return QPixmap();
+    const QSize medium(qMax(1, full.width() / 4), qMax(1, full.height() / 4));
+    const QSize tiny(qMax(1, full.width() / 12), qMax(1, full.height() / 12));
+    auto resize = [](const QImage &img, const QSize &size) {
+        return img.scaled(size, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+    };
+    image = resize(resize(resize(resize(image, medium), tiny), medium), full);
+    QPixmap result = QPixmap::fromImage(image);
+    result.setDevicePixelRatio(source.devicePixelRatio());
+    return result;
+}
+
 QString megabytes(qint64 bytes) {
     return QString::number(bytes / (1024.0 * 1024.0), 'f', bytes < 10LL * 1024 * 1024 ? 1 : 0) + " MB";
 }
 
+}
+
+CollagePanelFrame::CollagePanelFrame(QWidget *parent) : QWidget(parent) {
+    setAccessibleName("CollagePanelContainer");
+}
+
+void CollagePanelFrame::setBackdrop(const QPixmap &pixmap) {
+    mBackdrop = pixmap;
+    update();
+}
+
+void CollagePanelFrame::paintEvent(QPaintEvent *) {
+    const ColorScheme &colors = settings->colorScheme();
+    QPainter painter(this);
+    painter.setRenderHint(QPainter::Antialiasing);
+    QRectF box = QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5);
+    QPainterPath path;
+    path.addRoundedRect(box, 8, 8);
+    painter.setClipPath(path);
+    if(!mBackdrop.isNull())
+        painter.drawPixmap(rect(), mBackdrop);
+    QColor tint = colors.widget;
+    tint.setAlpha(mBackdrop.isNull() ? 235 : 190);
+    painter.fillPath(path, tint);
+    painter.setClipping(false);
+    painter.setPen(QPen(colors.widget_border, 1));
+    painter.setBrush(Qt::NoBrush);
+    painter.drawPath(path);
 }
 
 CollageWidget::CollageWidget(QWidget *parent) : QWidget(parent) {
@@ -101,8 +154,7 @@ CollageWidget::CollageWidget(QWidget *parent) : QWidget(parent) {
     QHBoxLayout *body = new QHBoxLayout();
     body->setContentsMargins(0, 0, 0, 0);
     body->setSpacing(0);
-    body->addWidget(mView, 1);
-    body->addWidget(mPanelContainer);
+    body->addWidget(mView, 1); // the properties panel floats above the view instead of taking room from it
 
     QVBoxLayout *root = new QVBoxLayout(this);
     root->setContentsMargins(0, 0, 0, 0);
@@ -128,6 +180,17 @@ CollageWidget::CollageWidget(QWidget *parent) : QWidget(parent) {
         setMode(isEditMode() ? CollageMode::View : CollageMode::Edit);
     });
     mView->viewport()->installEventFilter(this);
+
+    mBackdropTimer = new QTimer(this);
+    mBackdropTimer->setSingleShot(true);
+    mBackdropTimer->setInterval(BACKDROP_INTERVAL);
+    connect(mBackdropTimer, &QTimer::timeout, this, &CollageWidget::refreshBackdrop);
+    connect(mScene, &QGraphicsScene::changed, this, [this]() { scheduleBackdrop(); });
+    connect(mView, &CollageView::viewMoved, this, [this]() { scheduleBackdrop(); });
+    connect(settings, &Settings::settingsChanged, this, [this]() {
+        mPanelContainer->update();
+        scheduleBackdrop();
+    });
 
     mScene->setCanvasSize(QSize(PRESETS[0].width, PRESETS[0].height));
     updateStatus();
@@ -214,6 +277,7 @@ void CollageWidget::buildOverlay() {
         if(index < 0)
             return;
         mScene->setViewLayout(static_cast<CollageLayout::Mode>(index));
+        mView->fitCanvas(); // Freehand has a bigger scene than the other layouts
         updateLayoutRows();
         updatePanel();
         mView->setFocus();
@@ -275,14 +339,31 @@ void CollageWidget::buildOverlay() {
     mEmptyHint->hide();
 }
 
-// bar centered at the top of the view, wraps on narrow windows
+// panel: a floating card at the right edge of the view
+void CollageWidget::layoutPanel() {
+    QRect area = mView->geometry();
+    int width = qMax(160, qMin(PANEL_WIDTH, area.width() - 2 * PANEL_MARGIN));
+    int height = qMax(120, area.height() - 2 * PANEL_MARGIN);
+    mPanelContainer->setGeometry(area.right() - width - PANEL_MARGIN + 1, area.y() + PANEL_MARGIN, width, height);
+}
+
+// bar centered at the top of the view (beside the panel when it is open), wraps on narrow windows
 void CollageWidget::layoutOverlays() {
     QRect area = mView->geometry();
-    int width = qMax(120, qMin(area.width() - 20, 780));
-    int height = mOverlayLayout->heightForWidth(width);
-    mOverlayBar->setGeometry(area.x() + (area.width() - width) / 2, area.y() + 10, width, height);
     mEmptyHint->setGeometry(area);
     mEmptyHint->raise();
+    layoutPanel();
+    mPanelContainer->raise();
+
+    QRect barArea = area;
+    if(mPanelContainer->isVisible()) {
+        int room = mPanelContainer->x() - PANEL_MARGIN - area.x();
+        if(room >= BAR_MIN_WIDTH)
+            barArea.setWidth(room);
+    }
+    int width = qMax(120, qMin(barArea.width() - 20, 780));
+    int height = mOverlayLayout->heightForWidth(width);
+    mOverlayBar->setGeometry(barArea.x() + (barArea.width() - width) / 2, barArea.y() + 10, width, height);
     mOverlayBar->raise();
 }
 
@@ -321,6 +402,7 @@ bool CollageWidget::eventFilter(QObject *watched, QEvent *event) {
                 showOverlay();
         } else if(event->type() == QEvent::Resize) {
             layoutOverlays();
+            scheduleBackdrop();
         }
     }
     return QWidget::eventFilter(watched, event);
@@ -467,13 +549,13 @@ void CollageWidget::buildPanel() {
     mPanelScroll->setWidgetResizable(true);
     mPanelScroll->setFrameShape(QFrame::NoFrame);
     mPanelScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    mPanelScroll->setFixedWidth(PANEL_WIDTH);
+    mPanelScroll->viewport()->setAutoFillBackground(false); // the blurred backdrop shows through
 
     mPanelContent = new QWidget();
     mPanelContent->setAccessibleName("CollagePanel");
     QVBoxLayout *layout = new QVBoxLayout(mPanelContent);
-    layout->setContentsMargins(14, 12, 14, 14);
-    layout->setSpacing(12);
+    layout->setContentsMargins(16, 10, 16, 18);
+    layout->setSpacing(14);
 
     mNameLabel = new QLabel(mPanelContent);
     QFont bold = mNameLabel->font();
@@ -486,66 +568,92 @@ void CollageWidget::buildPanel() {
     layout->addWidget(mNameLabel);
     layout->addWidget(mInfoLabel);
 
+    // columns: 0 = label, 1 = control, 2 = value readout
     QGridLayout *grid = new QGridLayout();
-    grid->setHorizontalSpacing(10);
-    grid->setVerticalSpacing(10);
+    grid->setHorizontalSpacing(12);
+    grid->setVerticalSpacing(12);
+    grid->setColumnMinimumWidth(0, 72);
+    grid->setColumnStretch(1, 1);
     int row = 0;
 
-    mFitCombo = new QComboBox(mPanelContent);
-    mFitCombo->addItems({ tr("Fill (crop to frame)"), tr("Contain (whole image)"), tr("Stretch") });
-    grid->addWidget(new QLabel(tr("Fit"), mPanelContent), row, 0);
-    grid->addWidget(mFitCombo, row++, 1, 1, 3);
-
+    auto sectionTitle = [this, grid, &row](const QString &text) {
+        QLabel *title = new QLabel(text, mPanelContent);
+        title->setAccessibleName("CollageSectionTitle");
+        grid->addWidget(title, row++, 0, 1, 3);
+        return title;
+    };
+    auto makeValueLabel = [this]() {
+        QLabel *label = new QLabel(mPanelContent);
+        label->setMinimumWidth(44);
+        label->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        return label;
+    };
     auto makeSpin = [this](int min, int max) {
         QSpinBox *spin = new QSpinBox(mPanelContent);
         spin->setRange(min, max);
         spin->setKeyboardTracking(false);
         return spin;
     };
+    // two controls side by side across the control + value columns
+    auto pairRow = [this](QWidget *first, QWidget *second) {
+        QWidget *pair = new QWidget(mPanelContent);
+        QHBoxLayout *pairLayout = new QHBoxLayout(pair);
+        pairLayout->setContentsMargins(0, 0, 0, 0);
+        pairLayout->setSpacing(8);
+        pairLayout->addWidget(first, 1);
+        pairLayout->addWidget(second, 1);
+        return pair;
+    };
+
+    sectionTitle(tr("Frame"));
+    mFitCombo = new QComboBox(mPanelContent);
+    mFitCombo->addItems({ tr("Fill (crop to frame)"), tr("Contain (whole image)"), tr("Stretch") });
+    grid->addWidget(new QLabel(tr("Fit"), mPanelContent), row, 0);
+    grid->addWidget(mFitCombo, row++, 1, 1, 2);
+
+    // editor only: exact geometry; the spin boxes carry their own X / Y / W / H prefix
     mXSpin = makeSpin(-50000, 50000);
     mYSpin = makeSpin(-50000, 50000);
     mWidthSpin = makeSpin(24, 50000);
     mHeightSpin = makeSpin(24, 50000);
-    auto editLabel = [this, grid](const QString &text, int r, int c) {
-        QLabel *label = new QLabel(text, mPanelContent);
-        grid->addWidget(label, r, c);
-        mEditOnlyWidgets << label;
-    };
-    editLabel("X", row, 0);
-    grid->addWidget(mXSpin, row, 1);
-    editLabel("Y", row, 2);
-    grid->addWidget(mYSpin, row++, 3);
-    editLabel("W", row, 0);
-    grid->addWidget(mWidthSpin, row, 1);
-    editLabel("H", row, 2);
-    grid->addWidget(mHeightSpin, row++, 3);
+    mXSpin->setPrefix("X  ");
+    mYSpin->setPrefix("Y  ");
+    mWidthSpin->setPrefix("W  ");
+    mHeightSpin->setPrefix("H  ");
+    QLabel *positionLabel = new QLabel(tr("Position"), mPanelContent);
+    QWidget *positionPair = pairRow(mXSpin, mYSpin);
+    grid->addWidget(positionLabel, row, 0);
+    grid->addWidget(positionPair, row++, 1, 1, 2);
+    QLabel *sizeFrameLabel = new QLabel(tr("Size"), mPanelContent);
+    QWidget *sizePair = pairRow(mWidthSpin, mHeightSpin);
+    grid->addWidget(sizeFrameLabel, row, 0);
+    grid->addWidget(sizePair, row++, 1, 1, 2);
     mKeepAspectCheck = new QCheckBox(tr("Keep frame proportions"), mPanelContent);
-    grid->addWidget(mKeepAspectCheck, row++, 1, 1, 3);
-    mEditOnlyWidgets << mXSpin << mYSpin << mWidthSpin << mHeightSpin << mKeepAspectCheck;
+    grid->addWidget(mKeepAspectCheck, row++, 1, 1, 2);
+    mEditOnlyWidgets << positionLabel << positionPair << sizeFrameLabel << sizePair << mKeepAspectCheck;
 
     // view mode only: shape and share of the mosaic
     QLabel *aspectLabel = new QLabel(tr("Aspect"), mPanelContent);
     mViewAspectCombo = new QComboBox(mPanelContent);
     mViewAspectCombo->addItems({ tr("Original"), "1:1", "4:3", "3:2", "16:9", "9:16", "2:3", "3:4" });
     grid->addWidget(aspectLabel, row, 0);
-    grid->addWidget(mViewAspectCombo, row++, 1, 1, 3);
+    grid->addWidget(mViewAspectCombo, row++, 1, 1, 2);
     QLabel *sizeLabel = new QLabel(tr("Size"), mPanelContent);
     mViewSizeSlider = new QSlider(Qt::Horizontal, mPanelContent);
     mViewSizeSlider->setRange(50, 300);
-    mViewSizeValueLabel = new QLabel(mPanelContent);
-    mViewSizeValueLabel->setMinimumWidth(40);
+    mViewSizeValueLabel = makeValueLabel();
     grid->addWidget(sizeLabel, row, 0);
-    grid->addWidget(mViewSizeSlider, row, 1, 1, 2);
-    grid->addWidget(mViewSizeValueLabel, row++, 3);
+    grid->addWidget(mViewSizeSlider, row, 1);
+    grid->addWidget(mViewSizeValueLabel, row++, 2);
     mViewOnlyWidgets << aspectLabel << mViewAspectCombo << sizeLabel << mViewSizeSlider << mViewSizeValueLabel;
 
+    sectionTitle(tr("Crop"));
     mZoomSlider = new QSlider(Qt::Horizontal, mPanelContent);
     mZoomSlider->setRange(100, 800);
-    mZoomValueLabel = new QLabel(mPanelContent);
-    mZoomValueLabel->setMinimumWidth(40);
+    mZoomValueLabel = makeValueLabel();
     grid->addWidget(new QLabel(tr("Zoom"), mPanelContent), row, 0);
-    grid->addWidget(mZoomSlider, row, 1, 1, 2);
-    grid->addWidget(mZoomValueLabel, row++, 3);
+    grid->addWidget(mZoomSlider, row, 1);
+    grid->addWidget(mZoomValueLabel, row++, 2);
 
     mCropModeButton = new QPushButton(tr("Crop mode"), mPanelContent);
     mCropModeButton->setCheckable(true);
@@ -553,52 +661,52 @@ void CollageWidget::buildPanel() {
     mCropModeButton->setToolTip(tr("While on, dragging inside a frame moves the picture under it (always on in the collage view). Shift+wheel zooms."));
     QPushButton *resetCropButton = new QPushButton(tr("Reset crop"), mPanelContent);
     resetCropButton->setFocusPolicy(Qt::NoFocus);
-    grid->addWidget(mCropModeButton, row, 0, 1, 2);
-    grid->addWidget(resetCropButton, row++, 2, 1, 2);
+    grid->addWidget(pairRow(mCropModeButton, resetCropButton), row++, 0, 1, 3);
 
+    sectionTitle(tr("Look"));
     mOpacitySlider = new QSlider(Qt::Horizontal, mPanelContent);
     mOpacitySlider->setRange(5, 100);
-    mOpacityValueLabel = new QLabel(mPanelContent);
-    mOpacityValueLabel->setMinimumWidth(40);
+    mOpacityValueLabel = makeValueLabel();
     grid->addWidget(new QLabel(tr("Opacity"), mPanelContent), row, 0);
-    grid->addWidget(mOpacitySlider, row, 1, 1, 2);
-    grid->addWidget(mOpacityValueLabel, row++, 3);
+    grid->addWidget(mOpacitySlider, row, 1);
+    grid->addWidget(mOpacityValueLabel, row++, 2);
 
     mRadiusSpin = makeSpin(0, 1000);
     mRadiusSpin->setSuffix(" px");
     grid->addWidget(new QLabel(tr("Corners"), mPanelContent), row, 0);
-    grid->addWidget(mRadiusSpin, row++, 1, 1, 3);
+    grid->addWidget(mRadiusSpin, row++, 1, 1, 2);
 
+    sectionTitle(tr("Memory"));
     mResolutionCombo = new QComboBox(mPanelContent);
     mResolutionCombo->addItems({ tr("Auto (canvas size)"), tr("Original"), tr("4K  (3840 px)"),
                                  tr("2K  (2560 px)"), tr("1080p  (1920 px)"), tr("720p  (1280 px)") });
     mResolutionCombo->setToolTip(tr("Longest side of the working copy kept in memory. Lower it to save RAM when using many large images."));
     grid->addWidget(new QLabel(tr("Resolution"), mPanelContent), row, 0);
-    grid->addWidget(mResolutionCombo, row++, 1, 1, 3);
+    grid->addWidget(mResolutionCombo, row++, 1, 1, 2);
 
     // animated images only
-    QLabel *animLabel = new QLabel(tr("Animation"), mPanelContent);
+    QLabel *animTitle = sectionTitle(tr("Animation"));
+    QLabel *animLabel = new QLabel(tr("Playback"), mPanelContent);
     mAnimPlayCheck = new QCheckBox(tr("Play"), mPanelContent);
     mAnimPlayCheck->setToolTip(tr("Play / pause this image (Space)"));
     mAnimLoopCheck = new QCheckBox(tr("Loop"), mPanelContent);
     mAnimLoopCheck->setToolTip(tr("Off: play once and stop on the last frame"));
     mAnimPlayCheck->setFocusPolicy(Qt::NoFocus);
     mAnimLoopCheck->setFocusPolicy(Qt::NoFocus);
+    QWidget *playbackPair = pairRow(mAnimPlayCheck, mAnimLoopCheck);
     grid->addWidget(animLabel, row, 0);
-    grid->addWidget(mAnimPlayCheck, row, 1);
-    grid->addWidget(mAnimLoopCheck, row++, 2, 1, 2);
+    grid->addWidget(playbackPair, row++, 1, 1, 2);
     QLabel *speedLabel = new QLabel(tr("Speed"), mPanelContent);
     mAnimSpeedSlider = new QSlider(Qt::Horizontal, mPanelContent);
     mAnimSpeedSlider->setRange(25, 400);
     mAnimSpeedSlider->setSingleStep(25);
     mAnimSpeedSlider->setPageStep(25);
     mAnimSpeedSlider->setToolTip(tr("Playback speed, 100% = as authored"));
-    mAnimSpeedLabel = new QLabel(mPanelContent);
-    mAnimSpeedLabel->setMinimumWidth(40);
+    mAnimSpeedLabel = makeValueLabel();
     grid->addWidget(speedLabel, row, 0);
-    grid->addWidget(mAnimSpeedSlider, row, 1, 1, 2);
-    grid->addWidget(mAnimSpeedLabel, row++, 3);
-    mAnimWidgets << animLabel << mAnimPlayCheck << mAnimLoopCheck << speedLabel << mAnimSpeedSlider << mAnimSpeedLabel;
+    grid->addWidget(mAnimSpeedSlider, row, 1);
+    grid->addWidget(mAnimSpeedLabel, row++, 2);
+    mAnimWidgets << animTitle << animLabel << playbackPair << speedLabel << mAnimSpeedSlider << mAnimSpeedLabel;
     layout->addLayout(grid);
 
     // actions
@@ -608,6 +716,7 @@ void CollageWidget::buildPanel() {
     QPushButton *frontButton = new QPushButton(tr("Bring to front"), mPanelContent);
     QPushButton *backButton = new QPushButton(tr("Send to back"), mPanelContent);
     QPushButton *removeButton = new QPushButton(tr("Remove"), mPanelContent);
+    removeButton->setProperty("danger", true);
     for(QPushButton *button : {fillButton, centerButton, frontButton, backButton, removeButton})
         button->setFocusPolicy(Qt::NoFocus);
     // these keys are handled by CollageView::keyPressEvent
@@ -624,6 +733,7 @@ void CollageWidget::buildPanel() {
     actions->addWidget(frontButton, 1, 0);
     actions->addWidget(backButton, 1, 1);
     actions->addWidget(removeButton, 2, 0, 1, 2);
+    layout->addSpacing(4);
     layout->addLayout(actions);
     layout->addStretch(1);
 
@@ -631,17 +741,16 @@ void CollageWidget::buildPanel() {
 
     // header with the hide button; lives outside the scroll area so it stays usable
     // while the properties are disabled (nothing selected)
-    mPanelContainer = new QWidget(this);
-    mPanelContainer->setAccessibleName("CollagePanelContainer");
-    mPanelContainer->setFixedWidth(PANEL_WIDTH);
+    mPanelContainer = new CollagePanelFrame(this);
     QPushButton *hidePanelButton = new QPushButton(tr("Hide panel"), mPanelContainer);
     setButtonIcon(hidePanelButton, "menuitem/chevron-right16");
     hidePanelButton->setLayoutDirection(Qt::RightToLeft); // chevron after the label
     hidePanelButton->setToolTip(tr("Hide this panel"));
     hidePanelButton->setFocusPolicy(Qt::NoFocus);
     hidePanelButton->setCursor(Qt::PointingHandCursor);
+    hidePanelButton->setMinimumHeight(30);
     connect(hidePanelButton, &QPushButton::clicked, this, [this]() {
-        mPanelUserSet = true; // don't let the narrow / wide window logic reopen it
+        mPanelUserSet = true; // do not let the narrow / wide window logic reopen it
         setPanelVisible(false);
         mView->setFocus();
     });
@@ -651,16 +760,18 @@ void CollageWidget::buildPanel() {
     mHelpButton->setToolTip(tr("List all shortcuts and features of the collage"));
     mHelpButton->setFocusPolicy(Qt::NoFocus);
     mHelpButton->setCursor(Qt::PointingHandCursor);
+    mHelpButton->setMinimumHeight(30);
     connect(mHelpButton, &QPushButton::toggled, this, [this](bool) { updateHelpVisibility(); });
     mHelpScroll = new QScrollArea(mPanelContainer);
     mHelpScroll->setAccessibleName("CollagePanelScroll");
     mHelpScroll->setWidgetResizable(true);
     mHelpScroll->setFrameShape(QFrame::NoFrame);
     mHelpScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    mHelpScroll->viewport()->setAutoFillBackground(false);
     QWidget *helpContent = new QWidget();
     helpContent->setAccessibleName("CollagePanel");
     QVBoxLayout *helpLayout = new QVBoxLayout(helpContent);
-    helpLayout->setContentsMargins(14, 12, 14, 16);
+    helpLayout->setContentsMargins(16, 10, 16, 18);
     auto makeHelpLabel = [helpContent](const QString &html) {
         QLabel *label = new QLabel(html, helpContent);
         label->setTextFormat(Qt::RichText);
@@ -676,16 +787,24 @@ void CollageWidget::buildPanel() {
     mHelpScroll->setWidget(helpContent);
     mHelpScroll->hide();
 
+    QFrame *separator = new QFrame(mPanelContainer);
+    separator->setAccessibleName("CollagePanelSeparator");
+    separator->setFrameShape(QFrame::NoFrame);
+    separator->setFixedHeight(1);
+
     QHBoxLayout *headerLayout = new QHBoxLayout();
-    headerLayout->setContentsMargins(10, 8, 10, 0);
+    headerLayout->setContentsMargins(14, 14, 14, 10);
+    headerLayout->setSpacing(8);
     headerLayout->addWidget(mHelpButton);
     headerLayout->addWidget(hidePanelButton, 1);
     QVBoxLayout *containerLayout = new QVBoxLayout(mPanelContainer);
-    containerLayout->setContentsMargins(0, 0, 0, 0);
+    containerLayout->setContentsMargins(1, 0, 1, 1); // keep the scroll content inside the rounded border
     containerLayout->setSpacing(0);
     containerLayout->addLayout(headerLayout);
+    containerLayout->addWidget(separator);
     containerLayout->addWidget(mPanelScroll, 1);
     containerLayout->addWidget(mHelpScroll, 1);
+    mPanelContainer->hide();
 
     // --- editing -----------------------------------------------------------
     connect(mFitCombo, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int index) {
@@ -1192,6 +1311,8 @@ QString CollageWidget::helpHtml(bool edit) {
             { tr("Alt + drag"), tr("move the picture inside the tile") },
             { tr("Arrow keys"), tr("nudge the selected tile (Shift = 10 px)") },
             { tr("Page Up / Page Down"), tr("bring to front / send to back") },
+            { tr("Drag empty space / middle-drag"), tr("pan the endless canvas at any zoom (tiles can be parked off-screen)") },
+            { tr("Ctrl + 0"), tr("bring the canvas back to the centre") },
             { tr("Switching layout"), tr("your Freehand arrangement is kept for when you come back") } });
     } else {
         html += "<p><b>" + tr("Collage editor").toHtmlEscaped() + "</b></p>";
@@ -1243,6 +1364,7 @@ void CollageWidget::setPanelVisible(bool visible) {
         mEditPanelVisible = visible;
     else
         mViewPanelOpen = visible;
+    layoutOverlays();
     mPanelContainer->setVisible(visible);
     {
         QSignalBlocker blockEdit(mPanelToggle);
@@ -1250,8 +1372,28 @@ void CollageWidget::setPanelVisible(bool visible) {
         mPanelToggle->setChecked(visible);
         mViewPanelButton->setChecked(visible);
     }
-    if(mView->isAutoFit())
-        mView->fitCanvas();
+    // the panel floats, so the view keeps its size, zoom and tiles; only the bar may move aside
+    layoutOverlays();
+    if(visible)
+        refreshBackdrop();
+}
+
+void CollageWidget::scheduleBackdrop() {
+    if(mPanelContainer->isVisible() && !mBackdropTimer->isActive())
+        mBackdropTimer->start();
+}
+
+// blurred copy of the part of the collage under the panel
+void CollageWidget::refreshBackdrop() {
+    if(!mPanelContainer->isVisible())
+        return;
+    QWidget *viewport = mView->viewport();
+    QRect area(viewport->mapFrom(this, mPanelContainer->pos()), mPanelContainer->size());
+    area &= viewport->rect();
+    if(area.isEmpty())
+        return;
+    // the panel is a sibling of the view, so it is not part of the grab
+    mPanelContainer->setBackdrop(blurred(viewport->grab(area)));
 }
 
 // animations only run while the collage is on screen

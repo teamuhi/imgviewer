@@ -10,6 +10,7 @@
 #include <QScrollArea>
 #include <QStringList>
 #include <QTimer>
+#include <QPixmap>
 #include "gui/collage/collagescene.h"
 #include "gui/collage/collageview.h"
 #include "gui/customwidgets/colorselectorbutton.h"
@@ -18,6 +19,20 @@
 //  View - tiles fill the window, minimal auto-hiding bar, drag to swap, zoom / pan tiles
 //  Edit - fixed canvas with free frames, toolbar, per-image properties, export
 class WrapLayout;
+
+// Floating card for the properties panel: paints a blurred copy of the collage behind it, tinted with the theme
+class CollagePanelFrame : public QWidget {
+public:
+    explicit CollagePanelFrame(QWidget *parent = nullptr);
+    void setBackdrop(const QPixmap &pixmap);
+
+protected:
+    void paintEvent(QPaintEvent *event) override;
+
+private:
+    QPixmap mBackdrop;
+};
+
 class CollageWidget : public QWidget {
     Q_OBJECT
 public:
@@ -71,7 +86,7 @@ private:
     QPushButton *mPanelToggle;
 
     // properties panel
-    QWidget *mPanelContainer; // header (hide button) + scroll area
+    CollagePanelFrame *mPanelContainer; // floats over the view: header (hide button) + scroll area
     QScrollArea *mPanelScroll, *mHelpScroll;
     QPushButton *mHelpButton;
     QLabel *mHelpViewLabel, *mHelpEditLabel;
@@ -96,7 +111,7 @@ private:
     QSlider *mViewSizeSlider;
     QLabel *mViewSizeValueLabel, *mEmptyHint;
     QPushButton *mViewPanelButton;
-    QTimer *mOverlayTimer;
+    QTimer *mOverlayTimer, *mBackdropTimer;
     QList<QPair<QPushButton*, QString>> mIconButtons; // re-tinted when the theme changes
     QList<QWidget*> mEditOnlyWidgets, mViewOnlyWidgets; // panel rows that only make sense in one mode
     QList<QWidget*> mStackWidgets; // front / back: editor and the Freehand view layout
@@ -115,6 +130,9 @@ private:
     void applyModeUi();
     void updateLayoutRows();
     void layoutOverlays();
+    void layoutPanel();
+    void scheduleBackdrop();
+    void refreshBackdrop();
     void showOverlay();
     void updateOverlayVisibility();
     void emitInfoIfChanged();

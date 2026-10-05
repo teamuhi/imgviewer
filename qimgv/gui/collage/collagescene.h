@@ -33,6 +33,9 @@ public:
     // Freehand view layout: the user places / sizes the tiles, the scene only keeps them inside the window
     bool isFreeView() const { return mMode == CollageMode::View && mViewLayout == CollageLayout::MODE_FREEFORM; }
     QPointF clampToView(const CollageItem *item, const QPointF &pos) const;
+    // Freehand is an endless canvas: the view area plus generous room on every side, grown further while panning
+    QRectF freeWorldRect() const;
+    void growSceneRect(const QRectF &visible);
     void setViewGap(int gap);
     int viewGap() const;
     void relayoutView();

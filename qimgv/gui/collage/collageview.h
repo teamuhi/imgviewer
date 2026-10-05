@@ -23,8 +23,10 @@ signals:
     void filesDropped(const QStringList &paths);
     void modeToggleRequested(); // "E" key
     void animationToggleRequested(); // Space with no animated tile selected
+    void viewMoved();                // scrolled or zoomed (the floating panel refreshes its backdrop)
 
 protected:
+    void scrollContentsBy(int dx, int dy) override;
     void resizeEvent(QResizeEvent *event) override;
     void showEvent(QShowEvent *event) override;
     void wheelEvent(QWheelEvent *event) override;
@@ -41,8 +43,10 @@ private:
     bool mAutoFit = true;
     bool mPanning = false;
     bool mViewMode = false;
+    bool mGrowing = false; // guards ensurePanRoom() against the scroll changes its own resize causes
 
     void viewScaleChanged();
+    void ensurePanRoom();
     void applyDragMode();
     void updateViewArea();
     CollageItem *itemUnderCursor(const QPoint &pos) const;
