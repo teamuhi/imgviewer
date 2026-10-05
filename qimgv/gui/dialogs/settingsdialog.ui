@@ -600,6 +600,16 @@
                       <property name="verticalSpacing">
                        <number>7</number>
                       </property>
+                      <item row="2" column="1" colspan="2">
+                       <widget class="QCheckBox" name="showTopBar">
+                        <property name="toolTip">
+                         <string>Toolbar with file info and quick access buttons (hidden in fullscreen).</string>
+                        </property>
+                        <property name="text">
+                         <string>Top bar</string>
+                        </property>
+                       </widget>
+                      </item>
                       <item row="2" column="0">
                        <widget class="QCheckBox" name="showExtendedInfoTitle">
                         <property name="text">
@@ -1666,6 +1676,16 @@
                        </property>
                       </widget>
                      </item>
+                     <item>
+                      <widget class="QCheckBox" name="allowMp4CheckBox">
+                       <property name="toolTip">
+                        <string>mp4 and m4v files are blocked by default. They will not be listed or opened unless this is enabled.</string>
+                       </property>
+                       <property name="text">
+                        <string>Allow mp4 / m4v files</string>
+                       </property>
+                      </widget>
+                     </item>
                     </layout>
                    </widget>
                   </item>
@@ -2728,6 +2748,58 @@
                 </widget>
                </item>
                <item>
+                <widget class="QWidget" name="performanceGroup" native="true">
+                 <property name="accessibleName">
+                  <string notr="true">SGroup</string>
+                 </property>
+                 <layout class="QVBoxLayout" name="verticalLayoutPerformance">
+                  <property name="spacing">
+                   <number>7</number>
+                  </property>
+                  <property name="leftMargin">
+                   <number>13</number>
+                  </property>
+                  <property name="topMargin">
+                   <number>10</number>
+                  </property>
+                  <property name="rightMargin">
+                   <number>13</number>
+                  </property>
+                  <property name="bottomMargin">
+                   <number>10</number>
+                  </property>
+                  <item>
+                   <widget class="QLabel" name="titlePerformance">
+                    <property name="font">
+                     <font>
+                      <bold>true</bold>
+                     </font>
+                    </property>
+                    <property name="text">
+                     <string>Performance</string>
+                    </property>
+                   </widget>
+                  </item>
+                  <item>
+                   <widget class="QCheckBox" name="showTopBarPerformance">
+                    <property name="sizePolicy">
+                     <sizepolicy hsizetype="MinimumExpanding" vsizetype="Minimum">
+                      <horstretch>0</horstretch>
+                      <verstretch>0</verstretch>
+                     </sizepolicy>
+                    </property>
+                    <property name="toolTip">
+                     <string>Shows the CPU and memory used by qimgv in the top bar, updated every second. Needs the top bar (General &gt; Top bar).</string>
+                    </property>
+                    <property name="text">
+                     <string>Show CPU / RAM usage in the top bar</string>
+                    </property>
+                   </widget>
+                  </item>
+                 </layout>
+                </widget>
+               </item>
+               <item>
                 <spacer name="verticalSpacer_7">
                  <property name="orientation">
                   <enum>Qt::Vertical</enum>
@@ -3647,6 +3719,307 @@
                 </widget>
                </item>
                <item>
+                <spacer name="patternGroupSpacer">
+                 <property name="orientation">
+                  <enum>Qt::Vertical</enum>
+                 </property>
+                 <property name="sizeType">
+                  <enum>QSizePolicy::Fixed</enum>
+                 </property>
+                 <property name="sizeHint" stdset="0">
+                  <size>
+                   <width>20</width>
+                   <height>12</height>
+                  </size>
+                 </property>
+                </spacer>
+               </item>
+               <item>
+                <widget class="QWidget" name="backgroundPatternGroup" native="true">
+                 <property name="accessibleName">
+                  <string notr="true">SGroup</string>
+                 </property>
+                 <layout class="QVBoxLayout" name="backgroundPatternLayout">
+                  <property name="spacing">
+                   <number>7</number>
+                  </property>
+                  <property name="leftMargin">
+                   <number>13</number>
+                  </property>
+                  <property name="topMargin">
+                   <number>10</number>
+                  </property>
+                  <property name="rightMargin">
+                   <number>13</number>
+                  </property>
+                  <property name="bottomMargin">
+                   <number>10</number>
+                  </property>
+                  <item>
+                   <widget class="QLabel" name="patternHeaderLabel">
+                    <property name="font">
+                     <font>
+                      <bold>true</bold>
+                     </font>
+                    </property>
+                    <property name="text">
+                     <string>Background pattern</string>
+                    </property>
+                   </widget>
+                  </item>
+                  <item>
+                   <layout class="QHBoxLayout" name="patternTypeRow">
+                    <property name="topMargin">
+                     <number>0</number>
+                    </property>
+                    <item>
+                     <widget class="QLabel" name="patternTypeLabel">
+                      <property name="minimumSize">
+                       <size>
+                        <width>70</width>
+                        <height>0</height>
+                       </size>
+                      </property>
+                      <property name="text">
+                       <string>Pattern:</string>
+                      </property>
+                     </widget>
+                    </item>
+                    <item>
+                     <widget class="QComboBox" name="patternComboBox">
+                      <item>
+                       <property name="text">
+                        <string>None</string>
+                       </property>
+                      </item>
+                      <item>
+                       <property name="text">
+                        <string>Grid</string>
+                       </property>
+                      </item>
+                      <item>
+                       <property name="text">
+                        <string>Stripes</string>
+                       </property>
+                      </item>
+                      <item>
+                       <property name="text">
+                        <string>Checkerboard</string>
+                       </property>
+                      </item>
+                     </widget>
+                    </item>
+                    <item>
+                     <spacer name="patternTypeRowSpacer">
+                      <property name="orientation">
+                       <enum>Qt::Horizontal</enum>
+                      </property>
+                      <property name="sizeHint" stdset="0">
+                       <size>
+                        <width>40</width>
+                        <height>20</height>
+                       </size>
+                      </property>
+                     </spacer>
+                    </item>
+                   </layout>
+                  </item>
+                  <item>
+                   <layout class="QHBoxLayout" name="patternSizeRow">
+                    <property name="topMargin">
+                     <number>0</number>
+                    </property>
+                    <item>
+                     <widget class="QLabel" name="patternSizeLabelText">
+                      <property name="minimumSize">
+                       <size>
+                        <width>70</width>
+                        <height>0</height>
+                       </size>
+                      </property>
+                      <property name="text">
+                       <string>Size:</string>
+                      </property>
+                     </widget>
+                    </item>
+                    <item>
+                     <widget class="QSlider" name="patternSizeSlider">
+                      <property name="minimumSize">
+                       <size>
+                        <width>190</width>
+                        <height>10</height>
+                       </size>
+                      </property>
+                      <property name="minimum">
+                       <number>8</number>
+                      </property>
+                      <property name="maximum">
+                       <number>128</number>
+                      </property>
+                      <property name="orientation">
+                       <enum>Qt::Horizontal</enum>
+                      </property>
+                     </widget>
+                    </item>
+                    <item>
+                     <widget class="QLabel" name="patternSizeValueLabel">
+                      <property name="minimumSize">
+                       <size>
+                        <width>60</width>
+                        <height>0</height>
+                       </size>
+                      </property>
+                      <property name="text">
+                       <string notr="true"/>
+                      </property>
+                     </widget>
+                    </item>
+                    <item>
+                     <spacer name="patternSizeRowSpacer">
+                      <property name="orientation">
+                       <enum>Qt::Horizontal</enum>
+                      </property>
+                      <property name="sizeHint" stdset="0">
+                       <size>
+                        <width>40</width>
+                        <height>20</height>
+                       </size>
+                      </property>
+                     </spacer>
+                    </item>
+                   </layout>
+                  </item>
+                  <item>
+                   <layout class="QHBoxLayout" name="patternOpacityRow">
+                    <property name="topMargin">
+                     <number>0</number>
+                    </property>
+                    <item>
+                     <widget class="QLabel" name="patternOpacityLabelText">
+                      <property name="minimumSize">
+                       <size>
+                        <width>70</width>
+                        <height>0</height>
+                       </size>
+                      </property>
+                      <property name="text">
+                       <string>Opacity:</string>
+                      </property>
+                     </widget>
+                    </item>
+                    <item>
+                     <widget class="QSlider" name="patternOpacitySlider">
+                      <property name="minimumSize">
+                       <size>
+                        <width>190</width>
+                        <height>10</height>
+                       </size>
+                      </property>
+                      <property name="minimum">
+                       <number>1</number>
+                      </property>
+                      <property name="maximum">
+                       <number>100</number>
+                      </property>
+                      <property name="orientation">
+                       <enum>Qt::Horizontal</enum>
+                      </property>
+                     </widget>
+                    </item>
+                    <item>
+                     <widget class="QLabel" name="patternOpacityValueLabel">
+                      <property name="minimumSize">
+                       <size>
+                        <width>60</width>
+                        <height>0</height>
+                       </size>
+                      </property>
+                      <property name="text">
+                       <string notr="true"/>
+                      </property>
+                     </widget>
+                    </item>
+                    <item>
+                     <spacer name="patternOpacityRowSpacer">
+                      <property name="orientation">
+                       <enum>Qt::Horizontal</enum>
+                      </property>
+                      <property name="sizeHint" stdset="0">
+                       <size>
+                        <width>40</width>
+                        <height>20</height>
+                       </size>
+                      </property>
+                     </spacer>
+                    </item>
+                   </layout>
+                  </item>
+                  <item>
+                   <layout class="QHBoxLayout" name="patternColorRow">
+                    <property name="topMargin">
+                     <number>0</number>
+                    </property>
+                    <item>
+                     <widget class="QLabel" name="patternColorLabelText">
+                      <property name="minimumSize">
+                       <size>
+                        <width>70</width>
+                        <height>0</height>
+                       </size>
+                      </property>
+                      <property name="text">
+                       <string>Color:</string>
+                      </property>
+                     </widget>
+                    </item>
+                    <item>
+                     <widget class="ColorSelectorButton" name="patternColorButton">
+                      <property name="sizePolicy">
+                       <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                        <horstretch>0</horstretch>
+                        <verstretch>0</verstretch>
+                       </sizepolicy>
+                      </property>
+                      <property name="minimumSize">
+                       <size>
+                        <width>40</width>
+                        <height>22</height>
+                       </size>
+                      </property>
+                      <property name="cursor">
+                       <cursorShape>PointingHandCursor</cursorShape>
+                      </property>
+                      <property name="text">
+                       <string notr="true"/>
+                      </property>
+                     </widget>
+                    </item>
+                    <item>
+                     <widget class="QCheckBox" name="patternAutoColorCheckBox">
+                      <property name="text">
+                       <string>Use theme color</string>
+                      </property>
+                     </widget>
+                    </item>
+                    <item>
+                     <spacer name="patternColorRowSpacer">
+                      <property name="orientation">
+                       <enum>Qt::Horizontal</enum>
+                      </property>
+                      <property name="sizeHint" stdset="0">
+                       <size>
+                        <width>40</width>
+                        <height>20</height>
+                       </size>
+                      </property>
+                     </spacer>
+                    </item>
+                   </layout>
+                  </item>
+                 </layout>
+                </widget>
+               </item>
+               <item>
                 <spacer name="verticalSpacer_11">
                  <property name="orientation">
                   <enum>Qt::Vertical</enum>
@@ -3938,6 +4311,9 @@
                 </item>
                 <item>
                  <widget class="QComboBox" name="imageScrollingComboBox">
+                  <property name="toolTip">
+                   <string>"Touchpad &amp; Mouse Wheel" takes over the mouse wheel while the image is scrollable, so wheel zoom will not trigger.</string>
+                  </property>
                   <item>
                    <property name="text">
                     <string>None</string>

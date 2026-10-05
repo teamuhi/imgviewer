@@ -90,6 +90,11 @@ void Settings::loadStylesheet() {
         QPalette p;
         QColor sys_text = p.text().color();
         QColor sys_window = p.window().color();
+        // dialogs follow the app theme unless the system scheme was requested explicitly
+        if(!settings->useSystemColorScheme()) {
+            sys_text = colors.text;
+            sys_window = colors.widget;
+        }
         QColor sys_window_tinted, sys_window_tinted_lc, sys_window_tinted_lc2, sys_window_tinted_hc, sys_window_tinted_hc2;
         if(sys_window.valueF() <= 0.45f) {
             // dark system theme
@@ -160,6 +165,7 @@ void Settings::loadStylesheet() {
         styleSheet.replace("%contextmenu_border_radius%",  "3px");
 #endif
         styleSheet.replace("%sys_window%",    sys_window.name());
+        styleSheet.replace("%sys_text%",      sys_text.name());
         styleSheet.replace("%sys_window_tinted%",    sys_window_tinted.name());
         styleSheet.replace("%sys_window_tinted_lc%", sys_window_tinted_lc.name());
         styleSheet.replace("%sys_window_tinted_lc2%", sys_window_tinted_lc2.name());
@@ -181,6 +187,10 @@ void Settings::loadStylesheet() {
         styleSheet.replace("%folderview_topbar%",    colors.folderview_topbar.name());
         styleSheet.replace("%folderview_hc%",        colors.folderview_hc.name());
         styleSheet.replace("%folderview_hc2%",       colors.folderview_hc2.name());
+        // check mark drawn on top of the accent colored indicator: dark on light accents
+        styleSheet.replace("%check_icon%",           colors.accent.lightnessF() > 0.62
+                                                         ? ":/res/icons/common/checkbox/check-dark.png"
+                                                         : ":/res/icons/common/checkbox/check-white.png");
         styleSheet.replace("%accent%",               colors.accent.name());
         styleSheet.replace("%input_field_focus%",    colors.input_field_focus.name());
         styleSheet.replace("%overlay%",              colors.overlay.name());
@@ -313,7 +323,7 @@ QList<QByteArray> Settings::supportedFormats() {
     auto formats = QImageReader::supportedImageFormats();
     formats << "jfif";
     if(videoPlayback())
-        formats << mVideoFormatsMap.values();
+        formats << videoFormats().values();
     formats.removeAll("pdf");
     return formats;
 }
@@ -346,7 +356,7 @@ QStringList Settings::supportedMimeTypes() {
     QStringList filters;
     QList<QByteArray> mimeTypes = QImageReader::supportedMimeTypes();
     if(videoPlayback())
-        mimeTypes << mVideoFormatsMap.keys();
+        mimeTypes << videoFormats().keys();
     for(int i = 0; i < mimeTypes.count(); i++) {
         filters << QString(mimeTypes.at(i));
     }
@@ -363,6 +373,54 @@ bool Settings::videoPlayback() {
 
 void Settings::setVideoPlayback(bool mode) {
     settings->settingsConf->setValue("videoPlayback", mode);
+}
+
+bool Settings::allowMp4() {
+    return settings->settingsConf->value("allowMp4", false).toBool();
+}
+
+void Settings::setAllowMp4(bool mode) {
+    settings->settingsConf->setValue("allowMp4", mode);
+}
+//------------------------------------------------------------------------------
+BackgroundPattern Settings::backgroundPattern() {
+    int mode = settings->settingsConf->value("backgroundPattern", BG_PATTERN_GRID).toInt();
+    if(mode < BG_PATTERN_NONE || mode > BG_PATTERN_CHECKER)
+        mode = BG_PATTERN_GRID;
+    return static_cast<BackgroundPattern>(mode);
+}
+
+void Settings::setBackgroundPattern(BackgroundPattern mode) {
+    settings->settingsConf->setValue("backgroundPattern", mode);
+}
+
+int Settings::patternSize() {
+    bool ok = true;
+    int size = settings->settingsConf->value("patternSize", 24).toInt(&ok);
+    return ok ? qBound(8, size, 128) : 24;
+}
+
+void Settings::setPatternSize(int size) {
+    settings->settingsConf->setValue("patternSize", qBound(8, size, 128));
+}
+
+int Settings::patternOpacity() {
+    bool ok = true;
+    int percent = settings->settingsConf->value("patternOpacity", 18).toInt(&ok);
+    return ok ? qBound(1, percent, 100) : 18;
+}
+
+void Settings::setPatternOpacity(int percent) {
+    settings->settingsConf->setValue("patternOpacity", qBound(1, percent, 100));
+}
+
+QColor Settings::patternColor() {
+    QString name = settings->settingsConf->value("patternColor", "").toString();
+    return name.isEmpty() ? QColor() : QColor(name);
+}
+
+void Settings::setPatternColor(QColor color) {
+    settings->settingsConf->setValue("patternColor", color.isValid() ? color.name() : QString());
 }
 //------------------------------------------------------------------------------
 bool Settings::useSystemColorScheme() {
@@ -476,8 +534,12 @@ void Settings::setThumbPanelStyle(ThumbPanelStyle mode) {
     settings->settingsConf->setValue("thumbPanelStyle", mode);
 }
 //------------------------------------------------------------------------------
+// mp4 / m4v are blocked unless explicitly allowed (both share the video/mp4 mime key)
 const QMultiMap<QByteArray, QByteArray> Settings::videoFormats() const {
-    return mVideoFormatsMap;
+    QMultiMap<QByteArray, QByteArray> formats = mVideoFormatsMap;
+    if(!settings->allowMp4())
+        formats.remove("video/mp4");
+    return formats;
 }
 //------------------------------------------------------------------------------
 int Settings::panelPreviewsSize() {
@@ -884,6 +946,22 @@ void Settings::setInfoBarWindowed(bool mode) {
     settings->settingsConf->setValue("infoBarWindowed", mode);
 }
 //------------------------------------------------------------------------------
+bool Settings::topBarEnabled() {
+    return settings->settingsConf->value("topBarEnabled", true).toBool();
+}
+
+void Settings::setTopBarEnabled(bool mode) {
+    settings->settingsConf->setValue("topBarEnabled", mode);
+}
+
+bool Settings::topBarPerformance() {
+    return settings->settingsConf->value("topBarPerformance", false).toBool();
+}
+
+void Settings::setTopBarPerformance(bool mode) {
+    settings->settingsConf->setValue("topBarPerformance", mode);
+}
+//------------------------------------------------------------------------------
 bool Settings::windowTitleExtendedInfo() {
     return settings->settingsConf->value("windowTitleExtendedInfo", true).toBool();
 }
@@ -1081,6 +1159,22 @@ bool Settings::jxlAnimation() {
 
 void Settings::setJxlAnimation(bool mode) {
     settings->settingsConf->setValue("jxlAnimation", mode);
+}
+//------------------------------------------------------------------------------
+bool Settings::collageStaticCanvas() {
+    return settings->settingsConf->value("collageStaticCanvas", false).toBool();
+}
+
+void Settings::setCollageStaticCanvas(bool mode) {
+    settings->settingsConf->setValue("collageStaticCanvas", mode);
+}
+
+bool Settings::collageAnimate() {
+    return settings->settingsConf->value("collageAnimate", true).toBool();
+}
+
+void Settings::setCollageAnimate(bool mode) {
+    settings->settingsConf->setValue("collageAnimate", mode);
 }
 //------------------------------------------------------------------------------
 bool Settings::autoResizeWindow() {

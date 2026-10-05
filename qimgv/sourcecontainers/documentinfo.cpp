@@ -193,7 +193,12 @@ void DocumentInfo::loadExifTags() {
     try {
         std::unique_ptr<Exiv2::Image> image;
 
+#if EXIV2_TEST_VERSION(0, 28, 0)
+        // 0.28+ takes utf-8 paths on all platforms
+        image = Exiv2::ImageFactory::open(fileInfo.filePath().toUtf8().toStdString());
+#else
         image = Exiv2::ImageFactory::open(toStdString(fileInfo.filePath()));
+#endif
 
         assert(image.get() != 0);
         image->readMetadata();

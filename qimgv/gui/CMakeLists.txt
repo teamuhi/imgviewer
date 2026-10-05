@@ -4,6 +4,13 @@ target_sources(qimgv PRIVATE
     centralwidget.cpp
     contextmenu.cpp
     flowlayout.cpp
+    collage/collageimageloader.cpp
+    collage/collageitem.cpp
+    collage/collagelayout.cpp
+    collage/collagescene.cpp
+    collage/collageview.cpp
+    collage/collagewidget.cpp
+    collage/wraplayout.cpp
     idirectoryview.cpp
     mainwindow.cpp
 
@@ -27,9 +34,11 @@ target_sources(qimgv PRIVATE
     customwidgets/pushbuttonfocusind.cpp
     customwidgets/styledcombobox.cpp
     customwidgets/colorselectorbutton.cpp
+    customwidgets/colorareawidget.cpp
     customwidgets/entryinfoitem.cpp
     customwidgets/ssidebar.cpp
 
+    dialogs/colorpickerdialog.cpp
     dialogs/filereplacedialog.cpp
     dialogs/resizedialog.cpp
     dialogs/scripteditordialog.cpp
@@ -62,6 +71,7 @@ target_sources(qimgv PRIVATE
     panels/mainpanel/thumbnailstripproxy.cpp
     panels/sidepanel/sidepanel.cpp
 
+    panels/topbar/topbar.cpp
     panels/infobar/infobar.cpp
     panels/infobar/infobarproxy.cpp
 

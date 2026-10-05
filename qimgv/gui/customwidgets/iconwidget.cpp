@@ -1,4 +1,5 @@
 #include "iconwidget.h"
+#include <QFile>
 
 IconWidget::IconWidget(QWidget *parent)
     : QWidget(parent),
@@ -7,6 +8,7 @@ IconWidget::IconWidget(QWidget *parent)
 {
     dpr = this->devicePixelRatioF();
     color = settings->colorScheme().icons;
+    accentColor = settings->colorScheme().accent;
     connect(settings, &Settings::settingsChanged, this, &IconWidget::onSettingsChanged);
 }
 
@@ -16,8 +18,11 @@ IconWidget::~IconWidget() {
 }
 
 void IconWidget::onSettingsChanged() {
-    if(colorMode == ICON_COLOR_THEME && color != settings->colorScheme().icons) {
+    if(colorMode == ICON_COLOR_THEME &&
+       (color != settings->colorScheme().icons || accentColor != settings->colorScheme().accent))
+    {
         color = settings->colorScheme().icons;
+        accentColor = settings->colorScheme().accent;
         applyColor();
     }
 }
@@ -29,28 +34,44 @@ void IconWidget::setIconPath(QString path) {
     loadIcon();
 }
 
-void IconWidget::loadIcon() {
-    auto path = iconPath;
-    if(pixmap)
-        delete pixmap;
-    if(dpr >= (1.0 + 0.001)) {
-        path.replace(".", "@2x.");
+// Loads one icon layer, picking the @2x twin on hidpi screens.
+QPixmap IconWidget::loadPixmap(QString path) {
+    int dot = path.lastIndexOf('.');
+    if(dpr >= (1.0 + 0.001) && dot > 0) {
         hiResPixmap = true;
-        pixmap = new QPixmap(path);
-        if(dpr >= (2.0 - 0.001))
-            pixmapDrawScale = dpr;
-        else
-            pixmapDrawScale = 2.0;
-        pixmap->setDevicePixelRatio(pixmapDrawScale);
-    } else {
-        hiResPixmap = false;
-        pixmap = new QPixmap(path);
-        pixmapDrawScale = dpr;
+        QPixmap result(path.left(dot) + "@2x" + path.mid(dot));
+        pixmapDrawScale = (dpr >= (2.0 - 0.001)) ? dpr : 2.0;
+        result.setDevicePixelRatio(pixmapDrawScale);
+        return result;
     }
-    applyColor();
-    if(pixmap->isNull()) {
+    hiResPixmap = false;
+    pixmapDrawScale = dpr;
+    return QPixmap(path);
+}
+
+void IconWidget::loadIcon() {
+    if(pixmap) {
         delete pixmap;
         pixmap = nullptr;
+    }
+    baseSource = loadPixmap(iconPath);
+    // optional accent layer: "name.png" -> "name_accent.png"
+    accentSource = QPixmap();
+    hasAccent = false;
+    int dot = iconPath.lastIndexOf('.');
+    if(dot > 0 && !baseSource.isNull()) {
+        QString accentPath = iconPath.left(dot) + "_accent" + iconPath.mid(dot);
+        if(QFile::exists(accentPath)) {
+            QPixmap layer = loadPixmap(accentPath);
+            if(!layer.isNull() && layer.size() == baseSource.size()) {
+                accentSource = layer;
+                hasAccent = true;
+            }
+        }
+    }
+    if(!baseSource.isNull()) {
+        pixmap = new QPixmap(baseSource);
+        applyColor();
     }
     update();
 }
@@ -86,9 +107,23 @@ void IconWidget::setColor(QColor _color) {
 }
 
 void IconWidget::applyColor() {
-    if(!pixmap || pixmap->isNull() || colorMode == ICON_COLOR_SOURCE)
+    if(!pixmap || baseSource.isNull())
         return;
+    // rebuild from the pristine layers so repeated theme changes never stack
+    *pixmap = baseSource;
+    if(colorMode == ICON_COLOR_SOURCE) {
+        update();
+        return;
+    }
     ImageLib::recolor(*pixmap, color);
+    if(hasAccent) {
+        QPixmap layer = accentSource;
+        // forced-color callers (e.g. white click zone arrows) get a flat icon
+        ImageLib::recolor(layer, colorMode == ICON_COLOR_THEME ? accentColor : color);
+        QPainter p(pixmap);
+        p.drawPixmap(0, 0, layer);
+    }
+    update();
 }
 
 void IconWidget::paintEvent(QPaintEvent *event) {

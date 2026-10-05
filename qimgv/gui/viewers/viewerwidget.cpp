@@ -118,6 +118,7 @@ void ViewerWidget::disableImageViewer() {
         imageViewer->closeImage();
         imageViewer->hide();
         zoomIndicator->hide();
+        emit zoomLevelChanged(0.0);
         disconnect(imageViewer.get(), &ImageViewerV2::durationChanged, videoControls, &VideoControlsProxyWrapper::setPlaybackDuration);
         disconnect(imageViewer.get(), &ImageViewerV2::frameChanged,    videoControls, &VideoControlsProxyWrapper::setPlaybackPosition);
         disconnect(imageViewer.get(), &ImageViewerV2::animationPaused, videoControls, &VideoControlsProxyWrapper::onPlaybackPaused);
@@ -142,6 +143,7 @@ void ViewerWidget::disableVideoPlayer() {
 }
 
 void ViewerWidget::onScaleChanged(qreal scale) {
+    emit zoomLevelChanged(scale);
     if(!this->isVisible())
         return;
     if(scale != 1.0f) {

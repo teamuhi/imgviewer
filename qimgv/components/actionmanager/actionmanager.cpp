@@ -23,12 +23,11 @@ void ActionManager::initDefaults() {
     actionManager->defaults.insert("Left", "prevImage");
     actionManager->defaults.insert("XButton2", "nextImage");
     actionManager->defaults.insert("XButton1", "prevImage");
-    actionManager->defaults.insert("WheelDown", "nextImage");
-    actionManager->defaults.insert("WheelUp", "prevImage");
+    actionManager->defaults.insert("WheelDown", "zoomOutCursor");
+    actionManager->defaults.insert("WheelUp", "zoomInCursor");
     actionManager->defaults.insert("F", "toggleFullscreen");
     actionManager->defaults.insert("F11", "toggleFullscreen");
     actionManager->defaults.insert("LMB_DoubleClick", "toggleFullscreen");
-    actionManager->defaults.insert("MiddleButton", "exit");
     actionManager->defaults.insert("Space", "toggleFitMode");
     actionManager->defaults.insert("1", "fitWindow");
     actionManager->defaults.insert("2", "fitWidth");
@@ -39,8 +38,8 @@ void ActionManager::initDefaults() {
     actionManager->defaults.insert("V", "flipV");
     actionManager->defaults.insert(InputMap::keyNameCtrl() + "+R", "rotateRight");
     actionManager->defaults.insert(InputMap::keyNameCtrl() + "+L", "rotateLeft");
-    actionManager->defaults.insert(InputMap::keyNameCtrl() + "+WheelUp", "zoomInCursor");
-    actionManager->defaults.insert(InputMap::keyNameCtrl() + "+WheelDown", "zoomOutCursor");
+    actionManager->defaults.insert(InputMap::keyNameCtrl() + "+WheelUp", "prevImage");
+    actionManager->defaults.insert(InputMap::keyNameCtrl() + "+WheelDown", "nextImage");
     actionManager->defaults.insert("=", "zoomIn"); // [=+] key on the number row
     actionManager->defaults.insert(InputMap::keyNameCtrl() + "+=", "zoomIn");
     actionManager->defaults.insert("+", "zoomIn");
@@ -52,6 +51,7 @@ void ActionManager::initDefaults() {
     actionManager->defaults.insert("Up", "scrollUp");
     actionManager->defaults.insert("Down", "scrollDown");
     actionManager->defaults.insert(InputMap::keyNameCtrl() + "+O", "open");
+    actionManager->defaults.insert(InputMap::keyNameCtrl() + "+G", "openCollage");
     actionManager->defaults.insert(InputMap::keyNameCtrl() + "+S", "save");
     actionManager->defaults.insert(InputMap::keyNameCtrl() + "+" + InputMap::keyNameShift() + "+S", "saveAs");
     actionManager->defaults.insert(InputMap::keyNameCtrl() + "+W", "setWallpaper");
@@ -188,6 +188,18 @@ void ActionManager::adjustFromVersion(QVersionNumber lastVer) {
         }
         shortcuts = swapped;
     }
+    // wheel = zoom, Ctrl+wheel = prev/next. only migrate users still on the stock bindings
+    if(lastVer < QVersionNumber(1,0,4)) {
+        if(shortcuts.value("WheelUp") == "prevImage" && shortcuts.value("WheelDown") == "nextImage") {
+            qDebug() << "[actionManager]: swapping wheel zoom / navigation defaults";
+            shortcuts.remove(InputMap::keyNameCtrl() + "+WheelUp");
+            shortcuts.remove(InputMap::keyNameCtrl() + "+WheelDown");
+            shortcuts.insert("WheelUp",   "zoomInCursor");
+            shortcuts.insert("WheelDown", "zoomOutCursor");
+            shortcuts.insert(InputMap::keyNameCtrl() + "+WheelUp",   "prevImage");
+            shortcuts.insert(InputMap::keyNameCtrl() + "+WheelDown", "nextImage");
+        }
+    }
     // add new default actions
     QMapIterator<QString, QString> i(defaults);
     while(i.hasNext()) {
@@ -223,7 +235,19 @@ const QList<QString> ActionManager::shortcutsForAction(QString action) {
 }
 
 //------------------------------------------------------------------------------
+void ActionManager::setRestricted(bool mode) {
+    mRestricted = mode;
+}
+//------------------------------------------------------------------------------
 bool ActionManager::invokeAction(const QString &actionName) {
+    if(mRestricted) {
+        static const QStringList allowed = {
+            "open", "openCollage", "openSettings", "folderView", "documentView",
+            "toggleFolderView", "toggleFullscreen", "closeFullScreenOrExit"
+        };
+        if(!allowed.contains(actionName))
+            return false;
+    }
     ActionType type = validateAction(actionName);
     if(type == ActionType::ACTION_NORMAL) {
         QMetaObject::invokeMethod(this, actionName.toLatin1().constData(), Qt::DirectConnection);

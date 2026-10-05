@@ -47,7 +47,7 @@ FolderView::FolderView(QWidget *parent) :
     ui->togglePlacesPanelButton->setIconOffset(1, 0);
 
     ui->optionsPopupButton->setCheckable(true);
-    ui->optionsPopupButton->setIconPath(":res/icons/common/buttons/panel/folderview20.png");
+    ui->optionsPopupButton->setIconPath(":res/icons/common/buttons/panel/view-options20.png");
 
     ui->sortingComboBox->setIconPath(":res/icons/common/other/sorting-mode16.png");
 

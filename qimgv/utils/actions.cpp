@@ -41,6 +41,7 @@ void Actions::init() {
     mActions.insert("zoomInCursor", QVersionNumber(0,6,2));
     mActions.insert("zoomOutCursor", QVersionNumber(0,6,2));
     mActions.insert("open", QVersionNumber(0,6,2));
+    mActions.insert("openCollage", QVersionNumber(1,0,4));
     mActions.insert("save", QVersionNumber(0,6,2));
     mActions.insert("saveAs", QVersionNumber(0,6,2));
     mActions.insert("setWallpaper", QVersionNumber(0,9,3));

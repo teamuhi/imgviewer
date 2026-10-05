@@ -74,9 +74,17 @@ enum ImageScrolling {
     SCROLL_BY_TRACKPAD_AND_WHEEL
 };
 
+enum BackgroundPattern {
+    BG_PATTERN_NONE,
+    BG_PATTERN_GRID,
+    BG_PATTERN_STRIPES,
+    BG_PATTERN_CHECKER
+};
+
 enum ViewMode {
     MODE_DOCUMENT,
-    MODE_FOLDERVIEW
+    MODE_FOLDERVIEW,
+    MODE_COLLAGE // keep last: defaultViewMode is persisted by value
 };
 
 enum FolderEndAction {
@@ -233,9 +241,27 @@ public:
     const ColorScheme& colorScheme();
     void setColorScheme(ColorScheme scheme);
     void setColorTid(int tid);
+    void saveTheme();
 
     bool videoPlayback();
     void setVideoPlayback(bool mode);
+    bool allowMp4();
+    void setAllowMp4(bool mode);
+
+    bool topBarEnabled();
+    void setTopBarEnabled(bool mode);
+    // CPU / RAM of this process shown in the top bar
+    bool topBarPerformance();
+    void setTopBarPerformance(bool mode);
+
+    BackgroundPattern backgroundPattern();
+    void setBackgroundPattern(BackgroundPattern mode);
+    int patternSize();
+    void setPatternSize(int size);
+    int patternOpacity();
+    void setPatternOpacity(int percent);
+    QColor patternColor(); // invalid color = derive from theme
+    void setPatternColor(QColor color);
 
     bool useSystemColorScheme();
     void setUseSystemColorScheme(bool mode);
@@ -270,6 +296,10 @@ public:
     void setThumbPanelStyle(ThumbPanelStyle mode);
 
     bool jxlAnimation();
+    bool collageAnimate();
+    bool collageStaticCanvas();
+    void setCollageStaticCanvas(bool mode);
+    void setCollageAnimate(bool mode);
     void setJxlAnimation(bool mode);
     bool absoluteZoomStep();
     void setAbsoluteZoomStep(bool mode);
@@ -317,7 +347,6 @@ private:
     ColorScheme mColorScheme;
     QMultiMap<QByteArray, QByteArray> mVideoFormatsMap; // [mimetype, format]
     void loadTheme();
-    void saveTheme();
     void createColorVariants();
 
     void setupCache();

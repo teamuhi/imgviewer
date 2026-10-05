@@ -4,7 +4,7 @@ ColorSelectorButton::ColorSelectorButton(QWidget *parent) : ClickableLabel(paren
     connect(this, &ColorSelectorButton::clicked, this, &ColorSelectorButton::showColorSelector);
 }
 
-void ColorSelectorButton::setColor(QColor &newColor) {
+void ColorSelectorButton::setColor(const QColor &newColor) {
     mColor = newColor;
     update();
 }
@@ -18,10 +18,11 @@ QColor ColorSelectorButton::color() {
 }
 
 void ColorSelectorButton::showColorSelector() {
-    QColor newColor = QColorDialog::getColor(mColor, this, mDescription);
+    QColor newColor = ColorPickerDialog::getColor(mColor, window(), mDescription);
     if(newColor.isValid()) {
         mColor = newColor;
         update();
+        emit colorChanged(mColor);
     }
 }
 
@@ -32,7 +33,8 @@ void ColorSelectorButton::paintEvent(QPaintEvent *e) {
     p.setRenderHint(QPainter::Antialiasing);
     if(!this->isEnabled())
         p.setOpacity(0.5f);
-    p.setPen(QColor(40,40,40));
+    // semi-transparent border reads on both light and dark themes
+    p.setPen(QColor(128,128,128,200));
     p.drawRect(QRectF(0.5f, 0.5f, width() - 1.0f, height() - 1.0f));
     p.fillRect(rect().adjusted(2,2,-2,-2), mColor);
 }

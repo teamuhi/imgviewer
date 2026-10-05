@@ -16,10 +16,14 @@ public:
     void setAction(QString _actionName);
     void setTriggerMode(TriggerMode mode);
     TriggerMode triggerMode();
+    // appends the action's current keybind to the tooltip, e.g. "Collage (Ctrl+G)"
+    void setShortcutInToolTip(bool mode);
 
 protected:
+    bool event(QEvent *event) override;
     void mousePressEvent(QMouseEvent *event);
     void mouseReleaseEvent(QMouseEvent *event);
     QString actionName;
     TriggerMode mTriggerMode;
+    bool mShortcutInToolTip = false;
 };

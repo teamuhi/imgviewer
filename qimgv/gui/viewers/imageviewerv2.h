@@ -21,7 +21,8 @@ enum MouseInteractionState {
     MOUSE_DRAG,
     MOUSE_PAN,
     MOUSE_ZOOM,
-    MOUSE_WHEEL_ZOOM
+    MOUSE_WHEEL_ZOOM,
+    MOUSE_FREE_MOVE
 };
 
 enum ViewLockMode {
@@ -113,6 +114,7 @@ protected:
     void wheelEvent(QWheelEvent *event);
     void showEvent(QShowEvent *event);
     void drawBackground(QPainter *painter, const QRectF &rect);
+    void scrollContentsBy(int dx, int dy) override;
 
     bool eventFilter(QObject *o, QEvent *ev);
 protected slots:
@@ -153,6 +155,10 @@ private:
     int dragThreshold = 10;
 
     bool dragsEnabled = true;
+    // middle-drag free movement: the image was placed by hand, so do not re-centre / snap it
+    bool freeMoved = false;
+    bool middlePressed = false;
+    const int FREE_MOVE_MIN_VISIBLE = 48;
     bool wayland = false;
 
     float zoomStep = 0.1, dpr;
@@ -169,6 +175,8 @@ private:
     ScalingFilter mScalingFilter;
 
     QPixmap *checkboard;
+    QPixmap bgPatternTile;
+    void updateBackgroundPattern();
 
     void zoomAnchored(float newScale);
     void fitNormal();
@@ -195,6 +203,8 @@ private:
     Qt::TransformationMode selectTransformationMode();
     void centerIfNecessary();
     void snapToEdges();
+    void clampFreeMove(int &dx, int &dy) const;
+    void snapBack();
     void scrollSmooth(int dx, int dy);
     void scrollPrecise(int dx, int dy);
     void updateFitWindowScale();

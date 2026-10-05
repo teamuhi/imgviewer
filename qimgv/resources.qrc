@@ -14,6 +14,8 @@
         <file>res/icons/common/buttons/contextmenu/zoom-out18@2x.png</file>
         <file>res/icons/common/buttons/panel/close16.png</file>
         <file>res/icons/common/buttons/panel/close16@2x.png</file>
+        <file>res/icons/common/buttons/panel/collage20.png</file>
+        <file>res/icons/common/buttons/panel/collage20@2x.png</file>
         <file>res/icons/common/buttons/panel/folderview20.png</file>
         <file>res/icons/common/buttons/panel/folderview20@2x.png</file>
         <file>res/icons/common/buttons/panel/open16.png</file>
@@ -54,6 +56,8 @@
         <file>res/icons/common/menuitem/flip-v16@2x.png</file>
         <file>res/icons/common/menuitem/folder16.png</file>
         <file>res/icons/common/menuitem/folder16@2x.png</file>
+        <file>res/icons/common/menuitem/collage16.png</file>
+        <file>res/icons/common/menuitem/collage16@2x.png</file>
         <file>res/icons/common/menuitem/folderview16.png</file>
         <file>res/icons/common/menuitem/folderview16@2x.png</file>
         <file>res/icons/common/menuitem/image-crop16.png</file>
@@ -151,5 +155,48 @@
         <file>res/icons/common/overlay/arrow_right_50.png</file>
         <file>res/icons/common/overlay/arrow_left_50@2x.png</file>
         <file>res/icons/common/overlay/arrow_right_50@2x.png</file>
+        <file>res/icons/common/buttons/panel/open20_accent.png</file>
+        <file>res/icons/common/buttons/panel/open20_accent@2x.png</file>
+        <file>res/icons/common/buttons/panel/open16_accent.png</file>
+        <file>res/icons/common/buttons/panel/open16_accent@2x.png</file>
+        <file>res/icons/common/buttons/panel/folderview20_accent.png</file>
+        <file>res/icons/common/buttons/panel/folderview20_accent@2x.png</file>
+        <file>res/icons/common/buttons/panel/collage20_accent.png</file>
+        <file>res/icons/common/buttons/panel/collage20_accent@2x.png</file>
+        <file>res/icons/common/buttons/panel/back20.png</file>
+        <file>res/icons/common/buttons/panel/back20@2x.png</file>
+        <file>res/icons/common/buttons/panel/back20_accent.png</file>
+        <file>res/icons/common/buttons/panel/back20_accent@2x.png</file>
+        <file>res/icons/common/buttons/panel/export20.png</file>
+        <file>res/icons/common/buttons/panel/export20@2x.png</file>
+        <file>res/icons/common/buttons/panel/export20_accent.png</file>
+        <file>res/icons/common/buttons/panel/export20_accent@2x.png</file>
+        <file>res/icons/common/buttons/panel/settings20_accent.png</file>
+        <file>res/icons/common/buttons/panel/settings20_accent@2x.png</file>
+        <file>res/icons/common/buttons/panel/settings16_accent.png</file>
+        <file>res/icons/common/buttons/panel/settings16_accent@2x.png</file>
+        <file>res/icons/common/buttons/panel/document-view20_accent.png</file>
+        <file>res/icons/common/buttons/panel/document-view20_accent@2x.png</file>
+        <file>res/icons/common/buttons/panel/view-options20.png</file>
+        <file>res/icons/common/buttons/panel/view-options20@2x.png</file>
+        <file>res/icons/common/menuitem/open16_accent.png</file>
+        <file>res/icons/common/menuitem/open16_accent@2x.png</file>
+        <file>res/icons/common/menuitem/folderview16_accent.png</file>
+        <file>res/icons/common/menuitem/folderview16_accent@2x.png</file>
+        <file>res/icons/common/menuitem/collage16_accent.png</file>
+        <file>res/icons/common/menuitem/collage16_accent@2x.png</file>
+        <file>res/icons/common/menuitem/export16.png</file>
+        <file>res/icons/common/menuitem/export16@2x.png</file>
+        <file>res/icons/common/menuitem/export16_accent.png</file>
+        <file>res/icons/common/menuitem/export16_accent@2x.png</file>
+        <file>res/icons/common/menuitem/settings16_accent.png</file>
+        <file>res/icons/common/menuitem/settings16_accent@2x.png</file>
+        <file>res/icons/common/menuitem/chevron-right16.png</file>
+        <file>res/icons/common/menuitem/chevron-right16@2x.png</file>
+        <file>res/icons/common/menuitem/forward16@2x.png</file>
+        <file>res/icons/common/checkbox/check-white.png</file>
+        <file>res/icons/common/checkbox/check-white@2x.png</file>
+        <file>res/icons/common/checkbox/check-dark.png</file>
+        <file>res/icons/common/checkbox/check-dark@2x.png</file>
     </qresource>
 </RCC>

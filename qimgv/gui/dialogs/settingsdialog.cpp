@@ -30,6 +30,9 @@ SettingsDialog::SettingsDialog(QWidget *parent) :
         }
     });
 
+    // the readout lives in the top bar: nothing to show without it
+    connect(ui->showTopBar, &QCheckBox::toggled, ui->showTopBarPerformance, &QWidget::setEnabled);
+
     connect(ui->useSystemColorsCheckBox, &QCheckBox::toggled, [this](bool useSystemTheme) {
         if(useSystemTheme) {
             ui->themeSelectorComboBox->setCurrentIndex(-1);
@@ -62,6 +65,24 @@ SettingsDialog::SettingsDialog(QWidget *parent) :
     ui->colorSelectorOverlay->setDescription(tr("Overlay background"));
     ui->colorSelectorOverlayText->setDescription(tr("Overlay text"));
     ui->colorSelectorScrollbar->setDescription(tr("Scrollbars"));
+    ui->patternColorButton->setDescription(tr("Background pattern color"));
+
+    connect(ui->patternSizeSlider, &QSlider::valueChanged, [this](int value) {
+        ui->patternSizeValueLabel->setText(QString::number(value) + " px");
+    });
+    connect(ui->patternOpacitySlider, &QSlider::valueChanged, [this](int value) {
+        ui->patternOpacityValueLabel->setText(QString::number(value) + "%");
+    });
+    connect(ui->patternComboBox, qOverload<int>(&QComboBox::currentIndexChanged), [this](int index) {
+        bool enabled = (index != BG_PATTERN_NONE);
+        ui->patternSizeSlider->setEnabled(enabled);
+        ui->patternOpacitySlider->setEnabled(enabled);
+        ui->patternAutoColorCheckBox->setEnabled(enabled);
+        ui->patternColorButton->setEnabled(enabled && !ui->patternAutoColorCheckBox->isChecked());
+    });
+    connect(ui->patternAutoColorCheckBox, &QCheckBox::toggled, [this](bool useTheme) {
+        ui->patternColorButton->setEnabled(ui->patternComboBox->currentIndex() != BG_PATTERN_NONE && !useTheme);
+    });
 
 #ifndef USE_KDE_BLUR
     ui->blurBackgroundCheckBox->setEnabled(false);
@@ -173,6 +194,7 @@ void SettingsDialog::readSettings() {
     ui->videoPlaybackCheckBox->setChecked(settings->videoPlayback());
     ui->videoPlaybackGroupContents->setEnabled(settings->videoPlayback());
     ui->playSoundsCheckBox->setChecked(settings->playVideoSounds());
+    ui->allowMp4CheckBox->setChecked(settings->allowMp4());
     ui->enablePanelCheckBox->setChecked(settings->panelEnabled());
     ui->thumbnailPanelGroupContents->setEnabled(settings->panelEnabled());
     ui->panelFullscreenOnlyCheckBox->setChecked(settings->panelFullscreenOnly());
@@ -187,6 +209,20 @@ void SettingsDialog::readSettings() {
     ui->smoothAnimatedImagesCheckBox->setChecked(settings->smoothAnimatedImages());
     ui->bgOpacitySlider->setValue(static_cast<int>(settings->backgroundOpacity() * 100));
     ui->blurBackgroundCheckBox->setChecked(settings->blurBackground());
+    // background pattern
+    QColor patternColor = settings->patternColor();
+    bool patternAutoColor = !patternColor.isValid();
+    if(patternAutoColor)
+        patternColor = settings->colorScheme().text;
+    ui->patternColorButton->setColor(patternColor);
+    ui->patternAutoColorCheckBox->setChecked(patternAutoColor);
+    ui->patternSizeSlider->setValue(settings->patternSize());
+    ui->patternOpacitySlider->setValue(settings->patternOpacity());
+    ui->patternSizeValueLabel->setText(QString::number(settings->patternSize()) + " px");
+    ui->patternOpacityValueLabel->setText(QString::number(settings->patternOpacity()) + "%");
+    // set last so the enable/disable handler sees the final state
+    ui->patternComboBox->setCurrentIndex(-1);
+    ui->patternComboBox->setCurrentIndex(settings->backgroundPattern());
     ui->sortingComboBox->setCurrentIndex(settings->sortingMode());
     ui->confirmDeleteCheckBox->setChecked(settings->confirmDelete());
     ui->confirmTrashCheckBox->setChecked(settings->confirmTrash());
@@ -206,6 +242,9 @@ void SettingsDialog::readSettings() {
         ui->zoomIndicatorOff->setChecked(true);
     ui->showInfoBarFullscreen->setChecked(settings->infoBarFullscreen());
     ui->showInfoBarWindowed->setChecked(settings->infoBarWindowed());
+    ui->showTopBar->setChecked(settings->topBarEnabled());
+    ui->showTopBarPerformance->setChecked(settings->topBarPerformance());
+    ui->showTopBarPerformance->setEnabled(ui->showTopBar->isChecked());
     ui->showExtendedInfoTitle->setChecked(settings->windowTitleExtendedInfo());
     ui->cursorAutohideCheckBox->setChecked(settings->cursorAutohide());
     ui->keepFitModeCheckBox->setChecked(settings->keepFitMode());
@@ -321,6 +360,7 @@ void SettingsDialog::saveSettings() {
 
     settings->setVideoPlayback(ui->videoPlaybackCheckBox->isChecked());
     settings->setPlayVideoSounds(ui->playSoundsCheckBox->isChecked());
+    settings->setAllowMp4(ui->allowMp4CheckBox->isChecked());
     settings->setPanelEnabled(ui->enablePanelCheckBox->isChecked());
     settings->setPanelFullscreenOnly(ui->panelFullscreenOnlyCheckBox->isChecked());
     settings->setSquareThumbnails(ui->squareThumbnailsCheckBox->isChecked());
@@ -335,6 +375,10 @@ void SettingsDialog::saveSettings() {
 
     settings->setBackgroundOpacity(static_cast<qreal>(ui->bgOpacitySlider->value()) / 100.f);
     settings->setBlurBackground(ui->blurBackgroundCheckBox->isChecked());
+    settings->setBackgroundPattern(static_cast<BackgroundPattern>(qMax(0, ui->patternComboBox->currentIndex())));
+    settings->setPatternSize(ui->patternSizeSlider->value());
+    settings->setPatternOpacity(ui->patternOpacitySlider->value());
+    settings->setPatternColor(ui->patternAutoColorCheckBox->isChecked() ? QColor() : ui->patternColorButton->color());
     settings->setSortingMode(static_cast<SortingMode>(ui->sortingComboBox->currentIndex()));
     settings->setConfirmDelete(ui->confirmDeleteCheckBox->isChecked());
     settings->setConfirmTrash(ui->confirmTrashCheckBox->isChecked());
@@ -352,6 +396,8 @@ void SettingsDialog::saveSettings() {
         settings->setZoomIndicatorMode(INDICATOR_DISABLED);
     settings->setInfoBarFullscreen(ui->showInfoBarFullscreen->isChecked());
     settings->setInfoBarWindowed(ui->showInfoBarWindowed->isChecked());
+    settings->setTopBarEnabled(ui->showTopBar->isChecked());
+    settings->setTopBarPerformance(ui->showTopBarPerformance->isChecked());
     settings->setWindowTitleExtendedInfo(ui->showExtendedInfoTitle->isChecked());
     settings->setCursorAutohide(ui->cursorAutohideCheckBox->isChecked());
     settings->setKeepFitMode(ui->keepFitModeCheckBox->isChecked());

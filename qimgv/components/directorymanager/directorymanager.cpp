@@ -328,7 +328,8 @@ void DirectoryManager::addEntriesFromDirectory(std::vector<FSEntry> &entryVec, Q
         if(!settings->showHiddenFiles() && name.startsWith("."))
             continue;
 #else
-        DWORD attributes = GetFileAttributes(entry.path().generic_string().c_str());
+        // std::filesystem::path::c_str() is wchar_t* on windows
+        DWORD attributes = GetFileAttributesW(entry.path().c_str());
         if(!settings->showHiddenFiles() && attributes & FILE_ATTRIBUTE_HIDDEN)
             continue;
 #endif

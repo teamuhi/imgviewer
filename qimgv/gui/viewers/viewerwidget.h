@@ -66,6 +66,7 @@ private slots:
     void onAnimationPlaybackFinished();
 
 signals:
+    void zoomLevelChanged(qreal); // image magnification (1.0 = 100%), 0 = no image shown
     void scalingRequested(QSize, ScalingFilter);
     void zoomIn();
     void zoomOut();

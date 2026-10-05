@@ -1,4 +1,6 @@
 #include "actionbutton.h"
+#include <QToolTip>
+#include <QHelpEvent>
 
 ActionButton::ActionButton(QWidget *parent)
     : IconButton(parent),
@@ -32,6 +34,23 @@ void ActionButton::setTriggerMode(TriggerMode mode) {
 
 TriggerMode ActionButton::triggerMode() {
     return mTriggerMode;
+}
+
+void ActionButton::setShortcutInToolTip(bool mode) {
+    mShortcutInToolTip = mode;
+}
+
+// looked up when the tooltip is about to show, so rebinding in settings is picked up right away
+bool ActionButton::event(QEvent *event) {
+    if(mShortcutInToolTip && event->type() == QEvent::ToolTip && !toolTip().isEmpty()) {
+        QString text = toolTip();
+        const QString keys = actionManager->shortcutForAction(actionName);
+        if(!keys.isEmpty())
+            text += " (" + keys + ")";
+        QToolTip::showText(static_cast<QHelpEvent*>(event)->globalPos(), text, this);
+        return true;
+    }
+    return IconButton::event(event);
 }
 
 void ActionButton::mousePressEvent(QMouseEvent *event) {

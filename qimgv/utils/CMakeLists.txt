@@ -10,6 +10,7 @@ target_sources(qimgv PRIVATE
     script.cpp
     sleep.cpp
     stuff.cpp
+    processstats.cpp
     wallpapersetter.cpp
     fileoperations.cpp
 )

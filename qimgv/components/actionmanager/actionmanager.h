@@ -38,11 +38,14 @@ public:
     QString keyForNativeScancode(quint32 scanCode);
     void adjustFromVersion(QVersionNumber lastVer);
     void saveShortcuts();
+    // while restricted (collage view) only a few navigation actions are accepted
+    void setRestricted(bool mode);
 public slots:
     bool invokeAction(const QString &actionName);
 private:
     explicit ActionManager(QObject *parent = nullptr);
     QMap<QString, QString> defaults, shortcuts; // <shortcut, action>
+    bool mRestricted = false;
 
     static void initDefaults();
     static void initActions();
@@ -55,6 +58,7 @@ private:
 
 signals:
     void open();
+    void openCollage();
     void save();
     void saveAs();
     void openSettings();

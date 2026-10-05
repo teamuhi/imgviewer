@@ -36,13 +36,15 @@ Main window & panel        |  Folder view   |  Settings window
 
 | Action  | Shortcut |
 | ------------- | ------------- |
-| Next image  | Right arrow / MouseWheel |
-| Previous image  | Left arrow / MouseWheel |
+| Next image  | Right arrow / Ctrl+MouseWheel |
+| Previous image  | Left arrow / Ctrl+MouseWheel |
 | Goto first image  | Home |
 | Goto last image  | End |
-| Zoom in  | Ctrl+MouseWheel / Crtl+Up |
-| Zoom out  | Ctrl+MouseWheel / Crtl+Down |
+| Zoom in  | MouseWheel / Ctrl+Up |
+| Zoom out  | MouseWheel / Ctrl+Down |
 | Zoom (alt. method) | Hold right mouse button & move up / down |
+| Move the image freely (even when it fits the window) | MiddleMouse drag |
+| Snap a moved image back to the middle | MiddleMouse click (a fit mode key also re-centres it) |
 | Fit mode: window | 1 |
 | Fit mode: width | 2 |
 | Fit mode: 1:1 (no scaling) | 3 |
@@ -65,13 +67,54 @@ Main window & panel        |  Folder view   |  Settings window
 | Save As  | Ctrl+Shift+S |
 | Folder view | Enter / Backspace |
 | Open | Ctrl+O |
+| Collage view | Ctrl+G |
 | Print / Export PDF | Ctrl+P |
 | Settings  | P |
-| Exit application | Esc / Ctrl+Q / Alt+X / MiddleClick |
+| Exit application | Esc / Ctrl+Q / Alt+X |
 
 ... and more.
 
 Note: you can configure every shortcut by going to __Settings > Controls__
+
+### Top bar
+
+- The menu row on the left (General, View, Theme, Controls, Scripts, Advanced, About) opens the settings dialog on that page. On narrow windows it collapses into a *Settings* dropdown.
+- The percentage on the right is the current magnification of the image.
+- __Settings > View > Performance > Show CPU / RAM usage in the top bar__ (off by default) adds the CPU and memory usage of qimgv itself, updated every second. Hidden on narrow windows.
+- The bar can be turned off in __Settings > General > Top bar__ (it is always hidden in fullscreen).
+
+### Collage
+
+Open several images at once with __Ctrl+G__ (or the collage button in the top bar): select 2+ images in folder view first, or pick files in the dialog.
+Only a few shortcuts work while the collage is open (open, settings, fullscreen, folder view).
+
+| Action (collage view) | Shortcut |
+| ------------- | ------------- |
+| Zoom the whole collage | MouseWheel |
+| Pan the whole collage | Drag empty space / MiddleMouse drag |
+| Move the picture inside its tile | Drag the tile (Alt+drag also works) |
+| Zoom the picture inside its tile | Shift+MouseWheel over the tile |
+| Swap two tiles | Ctrl+drag a tile onto another |
+| Open a tile in the normal viewer | DoubleClick / Enter (the top bar Back button, Backspace or Esc returns to the collage) |
+| Back (editor -> collage view -> image viewer) | Esc (when no tile is selected) |
+| Tile settings (aspect, size, crop, resolution) | Right click a tile |
+| Select previous / next tile | Left / Right arrow (Freehand layout: nudge the tile, Shift = 10 px) |
+| Place tiles yourself | Layout -> Freehand: drag a tile, drag the handles to resize (Shift keeps proportions), Alt+drag moves the picture, Page Up / Page Down = front / back |
+| Play / pause the selected animated tile (none selected: all) | Space |
+| Remove tile | Delete |
+| Switch to editor / back to view | E |
+| Show the toolbar | Move the cursor to the top edge |
+
+| Action (collage editor) | Shortcut |
+| ------------- | ------------- |
+| Move / resize a frame | Drag / drag the handles (Shift keeps proportions, Ctrl disables snapping) |
+| Pan the picture inside a frame | Alt+drag or "Crop mode" |
+| Lock frames to the automatic layout (no free placement) | "Static canvas" checkbox in the editor toolbar (drag pans the picture, Ctrl+drag swaps frames) |
+| Zoom the picture inside a frame | Shift+MouseWheel |
+| Nudge selected frames | Arrow keys (Shift = 10 px) |
+| Select all / bring to front / send to back | Ctrl+A / PageUp / PageDown |
+| Fit canvas / actual size | Ctrl+0 / Ctrl+1 |
+| Play / pause animated frames | Space |
 
 # User interface
 

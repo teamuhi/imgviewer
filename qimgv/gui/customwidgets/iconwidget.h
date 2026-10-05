@@ -33,9 +33,13 @@ private slots:
 private:
     void loadIcon();
     void applyColor();
+    QPixmap loadPixmap(QString path);
 
     QString iconPath;
-    QColor color;
+    QColor color, accentColor;
+    // pristine (never recolored) layers; the displayed pixmap is rebuilt from them on every color change
+    QPixmap baseSource, accentSource;
+    bool hasAccent = false;
     IconColorMode colorMode = ICON_COLOR_THEME;
     bool hiResPixmap;
     QPoint iconOffset;

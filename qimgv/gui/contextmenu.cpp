@@ -81,6 +81,11 @@ ContextMenu::ContextMenu(QWidget *parent) :
     ui->folderView->setIconPath(":/res/icons/common/menuitem/folderview16.png");
     ui->folderView->setShortcutText("");
 
+    ui->collage->setAction("openCollage");
+    ui->collage->setText(tr("Collage"));
+    ui->collage->setIconPath(":/res/icons/common/menuitem/collage16.png");
+    ui->collage->setShortcutText("");
+
     ui->settings->setAction("openSettings");
     ui->settings->setText(tr("Settings"));
     ui->settings->setIconPath(":/res/icons/common/menuitem/settings16.png");

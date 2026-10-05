@@ -2,7 +2,7 @@
 #define COLORSELECTORBUTTON_H
 
 #include <QPainter>
-#include <QColorDialog>
+#include "gui/dialogs/colorpickerdialog.h"
 #include "gui/customwidgets/clickablelabel.h"
 
 class ColorSelectorButton : public ClickableLabel {
@@ -10,9 +10,12 @@ class ColorSelectorButton : public ClickableLabel {
 public:
     explicit ColorSelectorButton(QWidget *parent = nullptr);
 
-    void setColor(QColor &newColor);
+    void setColor(const QColor &newColor);
     QColor color();
     void setDescription(QString text);
+
+signals:
+    void colorChanged(const QColor &color);
 
 protected:
     void paintEvent(QPaintEvent *e);

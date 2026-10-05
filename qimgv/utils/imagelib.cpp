@@ -1,5 +1,51 @@
 #include "imagelib.h"
 
+// Builds one seamless tile of the configured background pattern (null pixmap if disabled).
+QPixmap ImageLib::backgroundPatternTile(qreal dpr) {
+    BackgroundPattern mode = settings->backgroundPattern();
+    if(mode == BG_PATTERN_NONE)
+        return QPixmap();
+    QColor color = settings->patternColor();
+    if(!color.isValid())
+        color = settings->colorScheme().text;
+    color.setAlphaF(settings->patternOpacity() / 100.0);
+
+    qreal ratio = qMax<qreal>(dpr, 1.0);
+    int cell = qMax(2, qRound(settings->patternSize() * ratio));
+    int line = qMax(1, qRound(ratio)); // 1 logical px
+    int side = (mode == BG_PATTERN_CHECKER) ? cell * 2 : cell;
+
+    QPixmap tile(side, side);
+    tile.fill(Qt::transparent);
+    QPainter p(&tile);
+    switch(mode) {
+        case BG_PATTERN_GRID:
+            p.fillRect(0, 0, side, line, color);
+            p.fillRect(0, line, line, side - line, color);
+            break;
+        case BG_PATTERN_STRIPES: {
+            p.setRenderHint(QPainter::Antialiasing);
+            QPen pen(color);
+            pen.setWidthF(qMax<qreal>(line, side * 0.16));
+            pen.setCapStyle(Qt::FlatCap);
+            p.setPen(pen);
+            // three diagonals so the stripes wrap seamlessly across tile edges
+            for(int k = -1; k <= 1; k++)
+                p.drawLine(QPointF(k * side, side), QPointF((k + 1) * side, 0));
+            break;
+        }
+        case BG_PATTERN_CHECKER:
+            p.fillRect(0, 0, cell, cell, color);
+            p.fillRect(cell, cell, cell, cell, color);
+            break;
+        default:
+            break;
+    }
+    p.end();
+    tile.setDevicePixelRatio(ratio);
+    return tile;
+}
+
 void ImageLib::recolor(QPixmap &pixmap, QColor color) {
     QPainter p(&pixmap);
     p.setCompositionMode(QPainter::CompositionMode_SourceIn);

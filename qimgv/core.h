@@ -60,6 +60,9 @@ private:
 
     State state;
     bool loopSlideshow, slideshow, shuffle;
+    bool returnToCollage = false; // current image was opened from the collage view
+    void setReturnToCollage(bool enabled);
+    void closeFullScreenOrBack();
     FolderEndAction folderEndAction;
 
     // components
@@ -174,5 +177,7 @@ private slots:
     void prevDirectory(bool selectLast);
     void prevDirectory();
     void print();
+    void openCollage();
+    void openFromCollage(const QString &path);
     void modelDelayLoad();
 };

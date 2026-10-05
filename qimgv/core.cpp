@@ -97,6 +97,7 @@ void Core::connectComponents() {
     connect(scriptManager, &ScriptManager::error, mw, &MW::showError);
 
     connect(mw, &MW::opened,                this, &Core::loadPath);
+    connect(mw, &MW::collageImageOpened,    this, &Core::openFromCollage);
     connect(mw, &MW::droppedIn,             this, &Core::onDropIn);
     connect(mw, &MW::copyRequested,         this, &Core::copyCurrentFile);
     connect(mw, &MW::moveRequested,         this, &Core::moveCurrentFile);
@@ -160,10 +161,11 @@ void Core::initActions() {
     connect(actionManager, &ActionManager::crop, this, &Core::toggleCropPanel);
     connect(actionManager, &ActionManager::setWallpaper, this, &Core::setWallpaper);
     connect(actionManager, &ActionManager::open, this, &Core::showOpenDialog);
+    connect(actionManager, &ActionManager::openCollage, this, &Core::openCollage);
     connect(actionManager, &ActionManager::save, this, &Core::saveCurrentFile);
     connect(actionManager, &ActionManager::saveAs, this, &Core::requestSavePath);
     connect(actionManager, &ActionManager::exit, this, &Core::close);
-    connect(actionManager, &ActionManager::closeFullScreenOrExit, mw, &MW::closeFullScreenOrExit);
+    connect(actionManager, &ActionManager::closeFullScreenOrExit, this, &Core::closeFullScreenOrBack);
     connect(actionManager, &ActionManager::removeFile, this, &Core::removePermanent);
     connect(actionManager, &ActionManager::moveToTrash, this, &Core::moveToTrash);
     connect(actionManager, &ActionManager::copyFile, mw, &MW::triggerCopyOverlay);
@@ -260,6 +262,9 @@ void Core::onUpdate() {
 void Core::onFirstRun() {
     //mw->showSomeSortOfWelcomeScreen();
     mw->showMessage(tr("Welcome to ") + qApp->applicationName() + tr(" version ") + appVersion.toString() + "!", 4000);
+    // fresh install: dark theme, saved so the preferences dialog preselects it
+    settings->setColorScheme(ThemeStore::colorScheme(COLORS_DARK));
+    settings->saveTheme();
     settings->setFirstRun(false);
     settings->setLastVersion(appVersion);
 }
@@ -343,6 +348,8 @@ void Core::rotateRight() {
 }
 
 void Core::close() {
+    if(!mw->confirmDiscardCollage())
+        return;
     mw->close();
 }
 
@@ -421,6 +428,13 @@ void Core::reloadImage(QString filePath) {
 }
 
 void Core::enableFolderView() {
+    // folder view / Backspace after opening a tile from the collage goes back to the collage
+    if(returnToCollage && mw->currentViewMode() == MODE_DOCUMENT) {
+        setReturnToCollage(false);
+        stopSlideshow();
+        mw->showCollage(QStringList());
+        return;
+    }
     if(mw->currentViewMode() == MODE_FOLDERVIEW)
         return;
     stopSlideshow();
@@ -716,6 +730,61 @@ void Core::outputError(const FileOpResult &error) const {
         return;
     mw->showError(FileOperations::decodeResult(error));
     qDebug() << FileOperations::decodeResult(error);
+}
+
+// Seeds the collage from the folder view selection (2+ images), resumes an existing
+// collage, or asks for files. Inside the collage it adds more images.
+// image was opened by double-clicking a collage tile
+void Core::openFromCollage(const QString &path) {
+    if(loadPath(path))
+        setReturnToCollage(true);
+}
+
+void Core::setReturnToCollage(bool enabled) {
+    returnToCollage = enabled;
+    mw->setReturnToCollage(enabled);
+}
+
+// Esc: leave fullscreen, otherwise go one step back (collage / image opened from it), otherwise exit
+void Core::closeFullScreenOrBack() {
+    if(!mw->isFullScreen()) {
+        if(mw->currentViewMode() == MODE_COLLAGE) {
+            mw->collageBack();
+            return;
+        }
+        if(returnToCollage && mw->currentViewMode() == MODE_DOCUMENT) {
+            openCollage();
+            return;
+        }
+    }
+    mw->closeFullScreenOrExit();
+}
+
+void Core::openCollage() {
+    setReturnToCollage(false);
+    QStringList paths;
+    ViewMode mode = mw->currentViewMode();
+    if(mode == MODE_FOLDERVIEW && model) {
+        const QList<QString> selected = folderViewPresenter.selectedPaths();
+        const QList<QByteArray> formats = QImageReader::supportedImageFormats();
+        for(const QString &path : selected) {
+            QFileInfo info(path);
+            if(info.isFile() && formats.contains(info.suffix().toLower().toLatin1()))
+                paths << path;
+        }
+        if(paths.count() < 2)
+            paths.clear();
+    }
+    if(paths.isEmpty() && mode != MODE_COLLAGE && mw->hasCollage()) {
+        mw->showCollage(paths); // resume
+        return;
+    }
+    if(paths.isEmpty())
+        paths = mw->pickCollageImages(model ? model->directoryPath() : QString());
+    if(paths.isEmpty())
+        return;
+    stopSlideshow();
+    mw->showCollage(paths);
 }
 
 void Core::showOpenDialog() {
@@ -1211,6 +1280,7 @@ void Core::reset() {
 bool Core::loadPath(QString path) {
     if(path.isEmpty())
         return false;
+    setReturnToCollage(false); // an explicit open forgets the collage
     if(path.startsWith("file://", Qt::CaseInsensitive))
         path.remove(0, 7);
 

@@ -1,4 +1,6 @@
 #include "imageviewerv2.h"
+#include "utils/imagelib.h"
+#include <QCoreApplication>
 
 ImageViewerV2::ImageViewerV2(QWidget *parent) : QGraphicsView(parent),
     pixmap(nullptr),
@@ -117,6 +119,7 @@ void ImageViewerV2::onDPRChanged() {
     qDebug() << "DPR CHANGED " << dpr << " >> " << this->devicePixelRatioF();
     dpr = this->devicePixelRatioF();
     zoomThreshold = static_cast<int>(dpr * 4.);
+    updateBackgroundPattern();
     if(pixmap) {
         pixmap->setDevicePixelRatio(dpr);
         pixmapItem.setPixmap(*pixmap);
@@ -152,6 +155,7 @@ void ImageViewerV2::readSettings() {
     }
     // set bg color
     onFullscreenModeChanged(mIsFullscreen);
+    updateBackgroundPattern();
     updateMinScale();
     setScalingFilter(settings->scalingFilter());
     setFitMode(imageFitModeDefault);
@@ -308,6 +312,7 @@ void ImageViewerV2::showAnimation(std::shared_ptr<QMovie> _movie) {
                 applySavedViewportPos();
         }
         startAnimation();
+        emit scaleChanged(currentScale());
     }
 }
 
@@ -339,11 +344,13 @@ void ImageViewerV2::showImage(std::unique_ptr<QPixmap> _pixmap) {
         }
         requestScaling();
         update();
+        emit scaleChanged(currentScale()); // doZoom() stays silent when the scale did not change
     }
 }
 
 // reset state, remove image & stop animation
 void ImageViewerV2::reset() {
+    freeMoved = false;
     stopPosAnimation();
     pixmapItemScaled.setPixmap(QPixmap());
     pixmapScaled.reset(nullptr);
@@ -516,6 +523,13 @@ void ImageViewerV2::mousePressEvent(QMouseEvent *event) {
     }
     mouseMoveStartPos = event->pos();
     mousePressPos = mouseMoveStartPos;
+    if(event->button() == Qt::MiddleButton) {
+        // middle button: free movement (decided on the first mouse move) or a plain click (see release)
+        if(mouseInteraction == MouseInteractionState::MOUSE_NONE)
+            middlePressed = true;
+        event->accept();
+        return;
+    }
     if(event->button() & Qt::RightButton) {
         setZoomAnchor(event->pos());
     } else {
@@ -528,6 +542,30 @@ void ImageViewerV2::mouseMoveEvent(QMouseEvent *event) {
     if(!pixmap || mouseInteraction == MouseInteractionState::MOUSE_DRAG || mouseInteraction == MouseInteractionState::MOUSE_WHEEL_ZOOM)
         return;
 
+    if(middlePressed && (event->buttons() & Qt::MiddleButton)) {
+        // ---------------- FREE MOVE -------------------
+        if(mouseInteraction == MouseInteractionState::MOUSE_NONE) {
+            // ignore jitter, a click must stay a click
+            if(abs(mousePressPos.x() - event->pos().x()) <= dragThreshold &&
+               abs(mousePressPos.y() - event->pos().y()) <= dragThreshold)
+                return;
+            mouseInteraction = MouseInteractionState::MOUSE_FREE_MOVE;
+            stopPosAnimation();
+            freeMoved = true;
+            imageFitMode = FIT_FREE;
+            setCursor(Qt::ClosedHandCursor);
+            mouseMoveStartPos = event->pos();
+        }
+        QPoint delta = mouseMoveStartPos - event->pos();
+        int dx = delta.x(), dy = delta.y();
+        clampFreeMove(dx, dy);
+        hs->setValue(hs->value() + dx);
+        vs->setValue(vs->value() + dy);
+        mouseMoveStartPos = event->pos();
+        saveViewportPos();
+        viewport()->update();
+        return;
+    }
     if(event->buttons() & Qt::LeftButton) {
         // ---------------- DRAG / PAN -------------------
         // select which action to start
@@ -576,6 +614,24 @@ void ImageViewerV2::mouseMoveEvent(QMouseEvent *event) {
 }
 
 void ImageViewerV2::mouseReleaseEvent(QMouseEvent *event) {
+    if(event->button() == Qt::MiddleButton && middlePressed) {
+        bool dragged = (mouseInteraction == MouseInteractionState::MOUSE_FREE_MOVE);
+        middlePressed = false;
+        mouseInteraction = MouseInteractionState::MOUSE_NONE;
+        unsetCursor();
+        event->accept();
+        if(!dragged && freeMoved) {
+            // middle click on an image that was moved by hand: snap it back to the middle
+            snapBack();
+        } else if(!dragged && window()) {
+            // plain middle click: the press was swallowed, so replay it for the action manager
+            // (shortcuts for non-right buttons are triggered on press)
+            QMouseEvent press(QEvent::MouseButtonPress, QPointF(event->pos()), QPointF(mapToGlobal(event->pos())),
+                              event->button(), event->buttons() | Qt::MiddleButton, event->modifiers());
+            QCoreApplication::sendEvent(window(), &press);
+        }
+        return;
+    }
     unsetCursor();
     if(forceFastScale) {
         forceFastScale = false;
@@ -699,11 +755,34 @@ void ImageViewerV2::showEvent(QShowEvent *event) {
         applyFitMode();
 }
 
+// Builds one seamless tile of the background pattern.
+// Cached; rebuilt only when settings or devicePixelRatio change.
+void ImageViewerV2::updateBackgroundPattern() {
+    bgPatternTile = ImageLib::backgroundPatternTile(dpr);
+    viewport()->update();
+}
+
 void ImageViewerV2::drawBackground(QPainter *painter, const QRectF &rect) {
     QGraphicsView::drawBackground(painter, rect);
+    // pattern is drawn in viewport space so it stays put while panning / zooming
+    if(!bgPatternTile.isNull()) {
+        painter->save();
+        painter->resetTransform();
+        painter->drawTiledPixmap(viewport()->rect(), bgPatternTile);
+        painter->restore();
+    }
     if(!isDisplaying() || !transparencyGrid || !pixmap->hasAlphaChannel())
         return;
     painter->drawTiledPixmap(pixmapItem.sceneBoundingRect(), *checkboard);
+}
+
+// QGraphicsView scrolls by blitting existing viewport pixels, which would drag the
+// viewport-anchored background pattern along and misalign it with freshly exposed areas.
+// Repaint the whole viewport instead while a pattern is active.
+void ImageViewerV2::scrollContentsBy(int dx, int dy) {
+    QGraphicsView::scrollContentsBy(dx, dy);
+    if(!bgPatternTile.isNull() && (dx || dy))
+        viewport()->update();
 }
 
 // simple pan behavior (cursor stops at the screen edges)
@@ -879,6 +958,9 @@ void ImageViewerV2::fitFree(float scale) {
 }
 
 void ImageViewerV2::applyFitMode() {
+    // a fit action re-centres the image
+    if(imageFitMode != FIT_FREE)
+        freeMoved = false;
     switch(imageFitMode) {
         case FIT_ORIGINAL:
             fitNormal();
@@ -1219,8 +1301,46 @@ void ImageViewerV2::applySavedViewportPos() {
     snapToEdges();
 }
 
-void ImageViewerV2::centerIfNecessary() {
+// puts a hand-moved image back in the middle of the viewport (zoom is kept)
+void ImageViewerV2::snapBack() {
     if(!pixmap)
+        return;
+    stopPosAnimation();
+    freeMoved = false;
+    centerOnPixmap();
+    centerIfNecessary();
+    snapToEdges();
+    // same bookkeeping as the right-button zoom: sitting exactly on a fit scale means that fit mode
+    if(pixmapItem.scale() == fitWindowScale)
+        imageFitMode = FIT_WINDOW;
+    else if(pixmapItem.scale() == fitWindowStretchScale)
+        imageFitMode = FIT_WINDOW_STRETCH;
+    saveViewportPos();
+    viewport()->update();
+}
+
+// keeps at least FREE_MOVE_MIN_VISIBLE px of the image inside the viewport while moving it by hand
+// dx / dy are scrollbar deltas (positive = view moves right / down = image moves left / up)
+void ImageViewerV2::clampFreeMove(int &dx, int &dy) const {
+    if(!pixmap)
+        return;
+    QRect img = scaledRectR();
+    int vw = viewport()->width();
+    int vh = viewport()->height();
+    int minX = qMin(FREE_MOVE_MIN_VISIBLE, qMax(1, img.width()));
+    int minY = qMin(FREE_MOVE_MIN_VISIBLE, qMax(1, img.height()));
+    // new image rect = img translated by (-dx, -dy)
+    int maxDx = img.right() - minX;         // image right edge must stay >= minX
+    int minDx = img.left() - (vw - minX);   // image left edge must stay <= vw - minX
+    int maxDy = img.bottom() - minY;
+    int minDy = img.top() - (vh - minY);
+    // already outside the allowed range (e.g. after zooming): only allow moves back towards it
+    dx = qBound(qMin(minDx, 0), dx, qMax(maxDx, 0));
+    dy = qBound(qMin(minDy, 0), dy, qMax(maxDy, 0));
+}
+
+void ImageViewerV2::centerIfNecessary() {
+    if(!pixmap || freeMoved)
         return;
     QSize sz = scaledSizeR();
     auto imgRect = pixmapItem.sceneBoundingRect();
@@ -1232,6 +1352,8 @@ void ImageViewerV2::centerIfNecessary() {
 }
 
 void ImageViewerV2::snapToEdges() {
+    if(freeMoved)
+        return;
     QRect imgRect = scaledRectR();
     // current vport center
     QPointF centerTarget = mapToScene(viewport()->rect()).boundingRect().center();

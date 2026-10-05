@@ -17,6 +17,8 @@ MW::MW(QWidget *parent)
       cropOverlay(nullptr)
 {
     setAttribute(Qt::WA_TranslucentBackground, true);
+    rootLayout.setContentsMargins(0,0,0,0);
+    rootLayout.setSpacing(0);
     layout.setContentsMargins(0,0,0,0);
     layout.setSpacing(0);
 
@@ -27,7 +29,7 @@ MW::MW(QWidget *parent)
     // via passthrough from child widgets
     setFocusPolicy(Qt::NoFocus);
 
-    this->setLayout(&layout);
+    this->setLayout(&rootLayout);
 
     setWindowTitle(QCoreApplication::applicationName() + " " +
                    QCoreApplication::applicationVersion());
@@ -58,6 +60,11 @@ MW::MW(QWidget *parent)
  *  ViewerWidget exists for input handling reasons (correct overlay hover handling)
  */
 void MW::setupUi() {
+    // top bar spans the whole window, everything else lives in the layout below it
+    topBar = new TopBar(this);
+    rootLayout.addWidget(topBar);
+    rootLayout.addLayout(&layout, 1);
+
     viewerWidget.reset(new ViewerWidget(this));
     infoBarWindowed.reset(new InfoBarProxy(this));
     docWidget.reset(new DocumentWidget(viewerWidget, infoBarWindowed));
@@ -70,6 +77,10 @@ void MW::setupUi() {
 
     centralWidget.reset(new CentralWidget(docWidget, folderView, this));
     layout.addWidget(centralWidget.get());
+    // the collage view only accepts a few navigation actions, everything else targets the document
+    connect(centralWidget.get(), &CentralWidget::viewModeChanged, this, [](ViewMode mode) {
+        actionManager->setRestricted(mode == MODE_COLLAGE);
+    });
     controlsOverlay = new ControlsOverlay(docWidget.get());
     infoBarFullscreen = new FullscreenInfoOverlayProxy(viewerWidget.get());
     sidePanel = new SidePanel(this);
@@ -79,6 +90,8 @@ void MW::setupUi() {
     connect(viewerWidget.get(), &ViewerWidget::scalingRequested, this, &MW::scalingRequested);
     connect(viewerWidget.get(), &ViewerWidget::draggedOut, this, qOverload<>(&MW::draggedOut));
     connect(viewerWidget.get(), &ViewerWidget::playbackFinished, this, &MW::playbackFinished);
+    connect(viewerWidget.get(), &ViewerWidget::zoomLevelChanged, topBar, &TopBar::setZoom);
+    connect(topBar, &TopBar::settingsPageRequested, this, &MW::showSettingsPage);
     connect(viewerWidget.get(), &ViewerWidget::showScriptSettings, this, &MW::showScriptSettings);
     connect(this, &MW::zoomIn,        viewerWidget.get(), &ViewerWidget::zoomIn);
     connect(this, &MW::zoomOut,       viewerWidget.get(), &ViewerWidget::zoomOut);
@@ -171,6 +184,45 @@ void MW::enableDocumentView() {
 
 ViewMode MW::currentViewMode() {
     return centralWidget->currentViewMode();
+}
+
+void MW::showCollage(const QStringList &paths) {
+    hideCropPanel();
+    if(copyOverlay)
+        copyOverlay->hide();
+    if(renameOverlay)
+        renameOverlay->hide();
+    docWidget->hideFloatingPanel();
+    imageInfoOverlay->hide();
+    CollageWidget *collage = centralWidget->ensureCollage();
+    if(!collageConnected) {
+        collageConnected = true;
+        connect(collage, &CollageWidget::openImageRequested, this, &MW::collageImageOpened);
+        connect(collage, &CollageWidget::infoChanged, this, &MW::onInfoUpdated);
+        connect(collage, &CollageWidget::exitRequested, this, &MW::enableDocumentView);
+    }
+    centralWidget->showCollageView();
+    if(!paths.isEmpty())
+        collage->addImages(paths);
+    onInfoUpdated();
+}
+
+bool MW::hasCollage() const {
+    CollageWidget *collage = centralWidget->collageWidget();
+    return collage && collage->imageCount() > 0;
+}
+
+QStringList MW::pickCollageImages(const QString &directory) {
+    return CollageWidget::pickImages(this, directory);
+}
+
+bool MW::confirmDiscardCollage() {
+    if(!hasCollage() || collageDiscardConfirmed)
+        return true;
+    bool ok = showConfirmation(tr("Close"), tr("A collage is open. Close the program and discard it?"));
+    if(ok)
+        collageDiscardConfirmed = true;
+    return ok;
 }
 
 void MW::fitWindow() {
@@ -500,6 +552,12 @@ void MW::close() {
 
 void MW::closeEvent(QCloseEvent *event) {
     // catch the close event when user presses X on the window itself
+    if(!confirmDiscardCollage()) {
+        event->ignore();
+        return;
+    }
+    // closing the window is deliberate: bypass the collage action lock
+    actionManager->setRestricted(false);
     event->accept();
     actionManager->invokeAction("exit");
 }
@@ -615,15 +673,18 @@ DialogResult MW::fileReplaceDialog(QString src, QString dst, FileReplaceMode mod
 }
 
 void MW::showSettings() {
-    docWidget->hideFloatingPanel();
-    SettingsDialog settingsDialog(this);
-    settingsDialog.exec();
+    showSettingsPage(0);
 }
 
 void MW::showScriptSettings() {
+    showSettingsPage(4);
+}
+
+void MW::showSettingsPage(int page) {
     docWidget->hideFloatingPanel();
     SettingsDialog settingsDialog(this);
-    settingsDialog.switchToPage(4);
+    if(page > 0)
+        settingsDialog.switchToPage(qMin(page, 6));
     settingsDialog.exec();
 }
 
@@ -780,6 +841,24 @@ void MW::closeFullScreenOrExit() {
     }
 }
 
+void MW::setReturnToCollage(bool enabled) {
+    if(returnToCollage == enabled)
+        return;
+    returnToCollage = enabled;
+    onInfoUpdated();
+}
+
+// Esc inside the collage: editor -> collage view -> image viewer
+void MW::collageBack() {
+    CollageWidget *collage = centralWidget->collageWidget();
+    if(!collage)
+        return;
+    if(collage->isEditMode())
+        collage->setMode(CollageMode::View);
+    else
+        enableDocumentView();
+}
+
 // todo: this is crap, use shared state object
 void MW::setCurrentInfo(int _index, int _fileCount, QString _filePath, QString _fileName, QSize _imageSize, qint64 _fileSize, bool slideshow, bool shuffle, bool edited) {
     info.index = _index;
@@ -809,15 +888,32 @@ void MW::onInfoUpdated() {
     if(renameOverlay)
         renameOverlay->setName(info.fileName);
 
+    // no way back from the other views without this
+    ViewMode viewMode = centralWidget->currentViewMode();
+    bool backToCollage = returnToCollage && viewMode == MODE_DOCUMENT;
+    topBar->setBackToCollage(backToCollage);
+    topBar->setBackVisible(backToCollage || viewMode != MODE_DOCUMENT);
+    topBar->setZoomAllowed(viewMode == MODE_DOCUMENT);
+
     QString windowTitle;
-    if(centralWidget->currentViewMode() == MODE_FOLDERVIEW) {
+    if(centralWidget->currentViewMode() == MODE_COLLAGE) {
+        CollageWidget *collage = centralWidget->collageWidget();
+        QString name = (collage && collage->isEditMode()) ? tr("Collage editor") : tr("Collage");
+        QString count = tr("%n image(s)", "", collage ? collage->imageCount() : 0);
+        windowTitle = name + " - " + count;
+        infoBarFullscreen->setInfo("", name, count);
+        infoBarWindowed->setInfo("", name, count);
+        topBar->setInfo("", name, count);
+    } else if(centralWidget->currentViewMode() == MODE_FOLDERVIEW) {
         windowTitle = tr("Folder view");
         infoBarFullscreen->setInfo("", tr("No file opened."), "");
         infoBarWindowed->setInfo("", tr("No file opened."), "");
+        topBar->setInfo("", tr("Folder view"), "");
     } else if(info.fileName.isEmpty()) {
         windowTitle = qApp->applicationName();
         infoBarFullscreen->setInfo("", tr("No file opened."), "");
         infoBarWindowed->setInfo("", tr("No file opened."), "");
+        topBar->setInfo("", tr("No file opened."), "");
     } else {
         windowTitle = info.fileName;
         if(settings->windowTitleExtendedInfo()) {
@@ -846,6 +942,7 @@ void MW::onInfoUpdated() {
 
         infoBarFullscreen->setInfo(posString, info.fileName + (info.edited ? "  *" : ""), resString + "  " + sizeString);
         infoBarWindowed->setInfo(posString, info.fileName + (info.edited ? "  *" : ""), resString + "  " + sizeString + " " + states);
+        topBar->setInfo(posString, info.fileName + (info.edited ? "  *" : ""), resString + "  " + sizeString + " " + states);
     }
     setWindowTitle(windowTitle);
 }
@@ -959,6 +1056,7 @@ void MW::adaptToWindowState() {
     if(isFullScreen()) { //-------------------------------------- fullscreen ---
         applyFullscreenBackground();
         infoBarWindowed->hide();
+        topBar->hide();
 
         if(showInfoBarFullscreen)
             infoBarFullscreen->showWhenReady();
@@ -973,6 +1071,7 @@ void MW::adaptToWindowState() {
     } else { //------------------------------------------------------ window ---
         applyWindowedBackground();
         infoBarFullscreen->hide();
+        topBar->setVisible(settings->topBarEnabled());
 
         if(showInfoBarWindowed)
             infoBarWindowed->show();

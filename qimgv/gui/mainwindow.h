@@ -37,6 +37,7 @@
 #include "gui/viewers/documentwidget.h"
 #include "gui/folderview/folderviewproxy.h"
 #include "gui/panels/infobar/infobarproxy.h"
+#include "gui/panels/topbar/topbar.h"
 
 #ifdef USE_KDE_BLUR
 #include <KWindowEffects>
@@ -79,12 +80,23 @@ public:
 
     ViewMode currentViewMode();
 
+    // collage editor
+    void showCollage(const QStringList &paths);
+    bool hasCollage() const;
+    QStringList pickCollageImages(const QString &directory);
+    // asks before the program closes while a collage is open. true = ok to proceed
+    bool confirmDiscardCollage();
+
     bool showConfirmation(QString title, QString msg);
     DialogResult fileReplaceDialog(QString source, QString target, FileReplaceMode mode, bool multiple);
 
 private:
     std::shared_ptr<ViewerWidget> viewerWidget;
+    // NOTE: rootLayout must stay declared before layout (layout is nested in it, destruction order)
+    QVBoxLayout rootLayout;
     QHBoxLayout layout;
+    TopBar *topBar;
+    bool returnToCollage = false; // the open image came from the collage
     QTimer windowGeometryChangeTimer;
     int currentDisplay;
 
@@ -112,6 +124,8 @@ private:
 
     PanelPosition panelPosition;
     CurrentInfo info;
+    bool collageDiscardConfirmed = false;
+    bool collageConnected = false;
 #if QT_VERSION < QT_VERSION_CHECK(5, 14, 0)
     QDesktopWidget desktopWidget;
 #endif
@@ -139,6 +153,8 @@ private slots:
     void onWindowGeometryChanged();
     void onInfoUpdated();
     void showScriptSettings();
+    // opens the settings dialog on a page (0 = General ... 6 = About)
+    void showSettingsPage(int page);
 
 protected:
     void mouseMoveEvent(QMouseEvent *event);
@@ -173,6 +189,7 @@ signals:
     void saveRequested();
     void saveAsRequested(QString);
     void sortingSelected(SortingMode);
+    void collageImageOpened(const QString &path); // a tile was opened from the collage
 
     // viewerWidget
     void scalingRequested(QSize, ScalingFilter);
@@ -229,6 +246,8 @@ public slots:
     void showError(QString text);
     void triggerMoveOverlay();
     void closeFullScreenOrExit();
+    void setReturnToCollage(bool enabled);
+    void collageBack();
     void close();
     void triggerCropPanel();
     void updateCropPanelData();
