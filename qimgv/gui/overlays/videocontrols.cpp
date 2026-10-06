@@ -1,6 +1,8 @@
 #include "videocontrols.h"
 #include "ui_videocontrols.h"
 
+static const int SLIDE_DURATION_MS = 180;
+
 VideoControls::VideoControls(FloatingWidgetContainer *parent) :
     OverlayWidget(parent),
     ui(new Ui::VideoControls)
@@ -18,6 +20,18 @@ VideoControls::VideoControls(FloatingWidgetContainer *parent) :
     ui->muteButton->setAction("toggleMute");
 
     lastPosition = -1;
+
+    slideAnimation = new QPropertyAnimation(this, "slideOffset", this);
+    slideAnimation->setDuration(SLIDE_DURATION_MS);
+    slideAnimation->setEasingCurve(QEasingCurve::OutCubic);
+    connect(slideAnimation, &QPropertyAnimation::finished, this, [this]() {
+        if(!hiding)
+            return;
+        hiding = false;
+        OverlayWidget::hide();
+        mSlideOffset = 0;
+        recalculateGeometry();
+    });
 
     readSettings();
     connect(settings, &Settings::settingsChanged, this, &VideoControls::readSettings);
@@ -37,6 +51,60 @@ void VideoControls::readSettings() {
 
 VideoControls::~VideoControls() {
     delete ui;
+}
+
+// distance that moves the bar completely out of the container, towards the edge it is docked to
+int VideoControls::hiddenOffset() {
+    const int travel = height() + verticalMargin();
+    return (position == FloatingWidgetPosition::TOP) ? -travel : travel;
+}
+
+int VideoControls::slideOffset() const {
+    return mSlideOffset;
+}
+
+// moves the bar and fades it with the slide: fully transparent at the edge, opaque at rest
+void VideoControls::setSlideOffset(int offset) {
+    move(x(), y() + offset - mSlideOffset);
+    mSlideOffset = offset;
+    const int total = qAbs(hiddenOffset());
+    setProperty("opacity", total ? 1.0 - qMin(1.0, qAbs(offset) / qreal(total)) : 1.0);
+}
+
+void VideoControls::recalculateGeometry() {
+    OverlayWidget::recalculateGeometry();
+    if(mSlideOffset)
+        move(x(), y() + mSlideOffset);
+}
+
+// called on every mouse move over the control area: only the first call starts the animation
+void VideoControls::show() {
+    if(!isHidden() && !hiding)
+        return;
+    const bool wasHidden = isHidden();
+    hiding = false; // before stop(): a cancelled hide must not finish
+    slideAnimation->stop();
+    OverlayWidget::show();
+    if(wasHidden)
+        setSlideOffset(hiddenOffset());
+    slideAnimation->setStartValue(mSlideOffset);
+    slideAnimation->setEndValue(0);
+    slideAnimation->start();
+}
+
+void VideoControls::hide() {
+    if(isHidden() || hiding)
+        return;
+    slideAnimation->stop();
+    if(!isVisible()) { // parent is not on screen, nothing to animate
+        mSlideOffset = 0;
+        OverlayWidget::hide();
+        return;
+    }
+    hiding = true;
+    slideAnimation->setStartValue(mSlideOffset);
+    slideAnimation->setEndValue(hiddenOffset());
+    slideAnimation->start();
 }
 
 void VideoControls::setMode(PlaybackMode _mode) {
