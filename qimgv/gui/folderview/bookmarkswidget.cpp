@@ -25,6 +25,10 @@ void BookmarksWidget::saveBookmarks() {
     settings->setBookmarks(paths);
 }
 
+bool BookmarksWidget::hasBookmark(const QString &dirPath) const {
+    return paths.contains(dirPath);
+}
+
 void BookmarksWidget::addBookmark(QString dirPath) {
     if(paths.contains(dirPath))
         return;

@@ -310,6 +310,19 @@ FullscreenInfoOverlay QLabel {
     color: %overlay_text%;
 }
 
+FullscreenStatsOverlay {
+    border: 0px solid transparent;
+    background-color: %overlay_rgba%;
+    border-top-left-radius: 0px;
+    border-top-right-radius: 0px;
+    border-bottom-left-radius: 3px;
+    border-bottom-right-radius: 0px;
+}
+
+FullscreenStatsOverlay QLabel {
+    color: %overlay_text%;
+}
+
 /*----------------------------------------------------------------------------*/
 /* Notifications */
 /*----------------------------------------------------------------------------*/
@@ -1233,12 +1246,18 @@ CollageWidget {
     background-color: %folderview%;
 }
 
+/* the editor toolbar floats and slides in like the view bar (see CollageOverlayBar below) */
 [accessibleName="CollageToolbar"] {
-    background-color: %widget%;
-    border-bottom: 1px solid %widget_border%;
+    background-color: %overlay_rgba%;
+    border: 1px solid %widget_border%;
+    border-radius: 6px;
 }
 
-/* the floating panel paints its own blurred, tinted card (CollagePanelFrame), so everything inside stays transparent */
+[accessibleName="CollageToolbar"] QLabel {
+    color: %overlay_text%;
+}
+
+/* the floating panel paints its own tinted card (CollagePanelFrame), so everything inside stays transparent */
 [accessibleName="CollagePanelContainer"],
 [accessibleName="CollagePanel"],
 [accessibleName="CollagePanelScroll"] {

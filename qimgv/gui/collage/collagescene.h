@@ -38,6 +38,10 @@ public:
     void growSceneRect(const QRectF &visible);
     void setViewGap(int gap);
     int viewGap() const;
+    // view canvas shape: width / height of the frame the tiles are laid out in, 0 = fill the whole window.
+    // Ignored by Freehand, which uses the whole window.
+    void setViewShape(qreal aspect);
+    qreal viewShape() const;
     void relayoutView();
     QList<CollageItem*> viewOrderItems() const;
     void swapTiles(quint64 a, quint64 b);
@@ -128,6 +132,7 @@ private:
     QHash<quint64, CollageItem::State> mEditStates, mViewStates;
     CollageLayout::Mode mViewLayout = CollageLayout::MODE_MOSAIC;
     int mViewGap = 6;
+    qreal mViewShape = 0.0;
     QPixmap mPatternTile;
     bool mAnimEnabled = true, mAnimActive = true;
     bool mStatic = false;
@@ -141,6 +146,8 @@ private:
     void placeNewFreeTile(CollageItem *item);
     void relayoutFree();
     void updateSceneRect();
+    QRectF viewAreaRect() const;
+    bool hasViewShape() const;
     void applyAnimationState();
     void relayoutStatic();
     void refreshPattern();

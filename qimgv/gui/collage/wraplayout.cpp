@@ -68,20 +68,38 @@ int WrapLayout::doLayout(const QRect &rect, bool testOnly) const {
     int x = area.x();
     int y = area.y();
     int lineHeight = 0;
+    int lineStart = 0; // index of the first item on the current line
 
-    for(QLayoutItem *item : mItems) {
+    // places the items of the finished line [lineStart, end) centred on the line's vertical middle
+    auto placeLine = [&](int end) {
+        if(testOnly)
+            return;
+        for(int i = lineStart; i < end; i++) {
+            QLayoutItem *item = mItems.at(i);
+            QSize hint = item->sizeHint();
+            item->setGeometry(QRect(QPoint(item->geometry().x(), y + (lineHeight - hint.height()) / 2), hint));
+        }
+    };
+
+    for(int i = 0; i < mItems.size(); i++) {
+        QLayoutItem *item = mItems.at(i);
+        if(item->isEmpty())
+            continue; // hidden widgets take no room
         QSize hint = item->sizeHint();
         int nextX = x + hint.width() + mHSpace;
         if(nextX - mHSpace > area.right() && lineHeight > 0) {
+            placeLine(i);
+            lineStart = i;
             x = area.x();
             y = y + lineHeight + mVSpace;
             nextX = x + hint.width() + mHSpace;
             lineHeight = 0;
         }
         if(!testOnly)
-            item->setGeometry(QRect(QPoint(x, y), hint));
+            item->setGeometry(QRect(QPoint(x, y), hint)); // x is final; y is fixed up in placeLine
         x = nextX;
         lineHeight = qMax(lineHeight, hint.height());
     }
+    placeLine(mItems.size());
     return y + lineHeight - rect.y() + bottom;
 }

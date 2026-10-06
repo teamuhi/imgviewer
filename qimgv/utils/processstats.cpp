@@ -112,3 +112,10 @@ bool ProcessStats::sample() {
 bool ProcessStats::hasCpu() const { return mHasCpu; }
 double ProcessStats::cpuPercent() const { return mCpu; }
 qint64 ProcessStats::memoryBytes() const { return mMemory; }
+
+QString ProcessStats::memoryText(qint64 bytes) {
+    double megabytes = bytes / (1024.0 * 1024.0);
+    if(megabytes >= 1024.0)
+        return QString::number(megabytes / 1024.0, 'f', 1) + " GB";
+    return QString::number(qRound(megabytes)) + " MB";
+}

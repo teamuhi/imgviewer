@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QElapsedTimer>
+#include <QString>
 #include <QtGlobal>
 
 // CPU / memory of the running process. sample() is cheap (a couple of syscalls), call it about once a second.
@@ -14,6 +15,8 @@ public:
     double cpuPercent() const;
     // resident set / working set
     qint64 memoryBytes() const;
+    // "512 MB" / "1.4 GB"
+    static QString memoryText(qint64 bytes);
 
 private:
     QElapsedTimer mWall;

@@ -182,6 +182,8 @@ private:
 
     // frames can be moved / resized by hand (editor, or the Freehand view layout)
     bool editLike() const { return !mViewMode || mFree; }
+    // resize handles exist on selected, hand-placed frames; crop mode hides them so a drag always pans the picture
+    bool handlesActive() const { return isSelected() && editLike() && !mCropMode; }
     QRectF handleRect(Handle handle) const;
     Handle handleAt(const QPointF &local) const;
     void resizeTo(const QPointF &scenePos, Qt::KeyboardModifiers modifiers);

@@ -52,6 +52,7 @@ FolderView::FolderView(QWidget *parent) :
     ui->sortingComboBox->setIconPath(":res/icons/common/other/sorting-mode16.png");
 
     ui->newBookmarkButton->setIconPath(":res/icons/common/buttons/panel-small/add-new12.png");
+    ui->newBookmarkButton->setToolTip(tr("Bookmark the current folder (click again to remove)"));
     ui->homeButton->setIconPath(":res/icons/common/buttons/panel-small/home12.png");
     ui->rootButton->setIconPath(":res/icons/common/buttons/panel-small/root12.png");
 
@@ -322,16 +323,21 @@ void FolderView::onBookmarkClicked(QString dirPath) {
     emit directorySelected(dirPath);
 }
 
+// bookmarks the folder that is currently open (removes the bookmark if it already exists)
 void FolderView::newBookmark() {
-    QFileDialog dialog;
-    dialog.setDirectory(QDir::homePath());
-    dialog.setWindowTitle("Select directory");
-    dialog.setWindowModality(Qt::ApplicationModal);
-    dialog.setFileMode(QFileDialog::Directory);
-    dialog.setOption(QFileDialog::ShowDirsOnly);
-    dialog.setOption(QFileDialog::DontResolveSymlinks);
-    connect(&dialog, &QFileDialog::fileSelected, ui->bookmarksWidget, &BookmarksWidget::addBookmark);
-    dialog.exec();
+    const QString path = ui->pathLabel->text();
+    if(path.isEmpty())
+        return;
+    if(ui->bookmarksWidget->hasBookmark(path)) {
+        ui->bookmarksWidget->removeBookmark(path);
+    } else {
+        ui->bookmarksWidget->addBookmark(path);
+        ui->bookmarksWidget->onPathChanged(path);
+        if(!ui->bookmarksWidget->isVisible()) {
+            ui->bookmarksWidget->show();
+            settings->setPlacesPanelBookmarksExpanded(true);
+        }
+    }
 }
 
 void FolderView::addItem() {

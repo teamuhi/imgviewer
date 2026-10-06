@@ -148,6 +148,9 @@ void CollageItem::setResolution(CollageRes res) { mRes = res; }
 bool CollageItem::cropMode() const { return mCropMode; }
 
 void CollageItem::setCropMode(bool mode) {
+    if(mCropMode == mode)
+        return;
+    prepareGeometryChange(); // shape() drops the handles while cropping
     mCropMode = mode;
     update();
 }
@@ -367,7 +370,7 @@ QRectF CollageItem::boundingRect() const {
 QPainterPath CollageItem::shape() const {
     QPainterPath path;
     path.addRect(frameRect());
-    if(isSelected() && editLike()) {
+    if(handlesActive()) {
         for(int h = H_TL; h <= H_L; h++)
             path.addRect(handleRect(static_cast<Handle>(h)));
     }
@@ -392,7 +395,7 @@ QRectF CollageItem::handleRect(Handle handle) const {
 }
 
 CollageItem::Handle CollageItem::handleAt(const QPointF &local) const {
-    if(isSelected() && editLike()) {
+    if(handlesActive()) {
         for(int h = H_TL; h <= H_L; h++) {
             if(handleRect(static_cast<Handle>(h)).contains(local))
                 return static_cast<Handle>(h);
@@ -460,7 +463,7 @@ void CollageItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *optio
         handlePen.setCosmetic(true);
         painter->setPen(handlePen);
         painter->setBrush(Qt::white);
-        if(editLike()) {
+        if(handlesActive()) {
             for(int h = H_TL; h <= H_L; h++)
                 painter->drawRect(handleRect(static_cast<Handle>(h)));
         }
@@ -578,6 +581,9 @@ void CollageItem::mousePressEvent(QGraphicsSceneMouseEvent *event) {
     mStartCenter = mCenter;
 
     bool wantsPan = (event->modifiers() & Qt::AltModifier) || mCropMode;
+    // cropping needs the picture to overflow the frame: Contain / Stretch switch to Fill first
+    if(wantsPan && mFit != CollageFit::Fill)
+        setFit(CollageFit::Fill);
     bool wantsResize = (mDragHandle != H_NONE && mDragHandle != H_BODY);
     if((wantsPan && mFit == CollageFit::Fill) || wantsResize) {
         if(!isSelected()) {

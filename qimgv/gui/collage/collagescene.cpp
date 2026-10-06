@@ -38,9 +38,32 @@ CollageMode CollageScene::mode() const { return mMode; }
 bool CollageScene::editorInitialized() const { return mEditorInitialized; }
 
 QSize CollageScene::canvasSize() const { return mCanvasSize; }
+QRectF CollageScene::viewAreaRect() const {
+    return QRectF(QPointF(0, 0), mViewArea);
+}
+
+// a canvas shape only applies to the automatic view layouts
+bool CollageScene::hasViewShape() const {
+    return mMode == CollageMode::View && mViewShape > 0.0 && mViewLayout != CollageLayout::MODE_FREEFORM;
+}
+
 QRectF CollageScene::canvasRect() const {
-    if(mMode == CollageMode::View)
-        return QRectF(QPointF(0, 0), mViewArea);
+    if(mMode == CollageMode::View) {
+        if(!hasViewShape())
+            return viewAreaRect();
+        // largest rect with the wanted aspect that fits the window, centred, with a small margin so the frame shows
+        const qreal margin = 12.0;
+        qreal availW = qMax(1.0, mViewArea.width() - 2 * margin);
+        qreal availH = qMax(1.0, mViewArea.height() - 2 * margin);
+        qreal w = availW, h = availW / mViewShape;
+        if(h > availH) {
+            h = availH;
+            w = availH * mViewShape;
+        }
+        w = qMax(1.0, w);
+        h = qMax(1.0, h);
+        return QRectF((mViewArea.width() - w) / 2.0, (mViewArea.height() - h) / 2.0, w, h);
+    }
     return QRectF(QPointF(0, 0), QSizeF(mCanvasSize));
 }
 QColor CollageScene::canvasColor() const { return mCanvasColor; }
@@ -54,7 +77,7 @@ void CollageScene::updateSceneRect() {
     if(mMode == CollageMode::View) {
         // the view area is the whole world: panning a zoomed collage stays inside it.
         // Freehand has room around it so the canvas can be moved freely
-        setSceneRect(isFreeView() ? freeWorldRect() : canvasRect());
+        setSceneRect(isFreeView() ? freeWorldRect() : viewAreaRect());
         return;
     }
     // room around the canvas so items can be parked outside of it
@@ -201,6 +224,19 @@ void CollageScene::setViewGap(int gap) {
 }
 
 int CollageScene::viewGap() const { return mViewGap; }
+
+void CollageScene::setViewShape(qreal aspect) {
+    aspect = aspect > 0.0 ? qBound(0.1, aspect, 10.0) : 0.0;
+    if(qFuzzyCompare(1.0 + mViewShape, 1.0 + aspect))
+        return;
+    mViewShape = aspect;
+    updateSceneRect();
+    refreshAutoResolution();
+    relayoutView();
+    update();
+}
+
+qreal CollageScene::viewShape() const { return mViewShape; }
 
 QList<CollageItem*> CollageScene::viewOrderItems() const {
     QList<CollageItem*> result;
@@ -666,15 +702,15 @@ void CollageScene::drawBackground(QPainter *painter, const QRectF &rect) {
 }
 
 void CollageScene::drawForeground(QPainter *painter, const QRectF &rect) {
-    if(mMode == CollageMode::View)
+    if(mMode == CollageMode::View && !hasViewShape())
         return;
     QRectF canvas = canvasRect();
-    // dim everything that will be cut off on export
+    // dim everything outside the canvas (in the editor: what is cut off on export; in the view: the shape frame)
     QPainterPath outside;
     outside.addRect(rect);
     QPainterPath inside;
     inside.addRect(canvas);
-    painter->fillPath(outside.subtracted(inside), QColor(0, 0, 0, 100));
+    painter->fillPath(outside.subtracted(inside), QColor(0, 0, 0, mMode == CollageMode::View ? 70 : 100));
 
     QPen pen(QColor(255, 255, 255, 90), 1);
     pen.setCosmetic(true);

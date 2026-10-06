@@ -620,8 +620,8 @@ void ImageViewerV2::mouseReleaseEvent(QMouseEvent *event) {
         mouseInteraction = MouseInteractionState::MOUSE_NONE;
         unsetCursor();
         event->accept();
-        if(!dragged && freeMoved) {
-            // middle click on an image that was moved by hand: snap it back to the middle
+        if(!dragged && (freeMoved || imageFitMode == FIT_FREE)) {
+            // middle click on an image that was moved / zoomed by hand: back to the default fit, centred
             snapBack();
         } else if(!dragged && window()) {
             // plain middle click: the press was swallowed, so replay it for the action manager
@@ -1301,20 +1301,12 @@ void ImageViewerV2::applySavedViewportPos() {
     snapToEdges();
 }
 
-// puts a hand-moved image back in the middle of the viewport (zoom is kept)
+// puts a hand-moved / zoomed image back in the middle of the viewport at the default fit (position and magnification reset)
 void ImageViewerV2::snapBack() {
     if(!pixmap)
         return;
-    stopPosAnimation();
     freeMoved = false;
-    centerOnPixmap();
-    centerIfNecessary();
-    snapToEdges();
-    // same bookkeeping as the right-button zoom: sitting exactly on a fit scale means that fit mode
-    if(pixmapItem.scale() == fitWindowScale)
-        imageFitMode = FIT_WINDOW;
-    else if(pixmapItem.scale() == fitWindowStretchScale)
-        imageFitMode = FIT_WINDOW_STRETCH;
+    setFitMode(imageFitModeDefault != FIT_FREE ? imageFitModeDefault : FIT_WINDOW);
     saveViewportPos();
     viewport()->update();
 }

@@ -42,7 +42,15 @@ void ImageStatic::loadGeneric() {
     r.setAllocationLimit(settings->memoryAllocationLimit());
 #endif
     QImage *tmp = new QImage();
-    r.read(tmp);
+    if(!r.read(tmp) && tmp->isNull()) {
+        // Format hint failed (e.g. wrong extension / misdetected type): retry letting Qt pick by content
+        QImageReader fallback(mPath);
+        fallback.setDecideFormatFromContent(true);
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+        fallback.setAllocationLimit(settings->memoryAllocationLimit());
+#endif
+        fallback.read(tmp);
+    }
     std::unique_ptr<const QImage> img(tmp);
     img = ImageLib::exifRotated(std::move(img), mDocInfo.get()->exifOrientation());
     // scaling this format via qt results in transparent background

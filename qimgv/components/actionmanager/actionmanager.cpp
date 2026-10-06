@@ -59,7 +59,7 @@ void ActionManager::initDefaults() {
     actionManager->defaults.insert(InputMap::keyNameCtrl() + "+P", "print");
     actionManager->defaults.insert(InputMap::keyNameAlt() + "+X", "exit");
     actionManager->defaults.insert(InputMap::keyNameCtrl() + "+Q", "exit");
-    actionManager->defaults.insert("Esc", "closeFullScreenOrExit");
+    actionManager->defaults.insert("Esc", "closeFullScreen");
     actionManager->defaults.insert("Del", "moveToTrash");
     actionManager->defaults.insert(InputMap::keyNameShift() + "+Del", "removeFile");
     actionManager->defaults.insert("C", "copyFile");
@@ -243,7 +243,7 @@ bool ActionManager::invokeAction(const QString &actionName) {
     if(mRestricted) {
         static const QStringList allowed = {
             "open", "openCollage", "openSettings", "folderView", "documentView",
-            "toggleFolderView", "toggleFullscreen", "closeFullScreenOrExit"
+            "toggleFolderView", "toggleFullscreen", "closeFullScreen"
         };
         if(!allowed.contains(actionName))
             return false;
@@ -292,6 +292,11 @@ ActionType ActionManager::validateAction(const QString &actionName) {
 //------------------------------------------------------------------------------
 void ActionManager::readShortcuts() {
     settings->readShortcuts(shortcuts);
+    // old name of the Esc action (it used to exit the app too): keep saved bindings working
+    for(auto it = shortcuts.begin(); it != shortcuts.end(); ++it) {
+        if(it.value() == "closeFullScreenOrExit")
+            it.value() = "closeFullScreen";
+    }
     actionManager->validateShortcuts();
 }
 //------------------------------------------------------------------------------

@@ -165,7 +165,7 @@ void Core::initActions() {
     connect(actionManager, &ActionManager::save, this, &Core::saveCurrentFile);
     connect(actionManager, &ActionManager::saveAs, this, &Core::requestSavePath);
     connect(actionManager, &ActionManager::exit, this, &Core::close);
-    connect(actionManager, &ActionManager::closeFullScreenOrExit, this, &Core::closeFullScreenOrBack);
+    connect(actionManager, &ActionManager::closeFullScreen, this, &Core::closeFullScreenOrBack);
     connect(actionManager, &ActionManager::removeFile, this, &Core::removePermanent);
     connect(actionManager, &ActionManager::moveToTrash, this, &Core::moveToTrash);
     connect(actionManager, &ActionManager::copyFile, mw, &MW::triggerCopyOverlay);
@@ -745,19 +745,15 @@ void Core::setReturnToCollage(bool enabled) {
     mw->setReturnToCollage(enabled);
 }
 
-// Esc: leave fullscreen, otherwise go one step back (collage / image opened from it), otherwise exit
+// Esc: leave fullscreen, otherwise go one step back (collage / image opened from it); never exits the app
 void Core::closeFullScreenOrBack() {
-    if(!mw->isFullScreen()) {
-        if(mw->currentViewMode() == MODE_COLLAGE) {
-            mw->collageBack();
-            return;
-        }
-        if(returnToCollage && mw->currentViewMode() == MODE_DOCUMENT) {
-            openCollage();
-            return;
-        }
+    if(mw->isFullScreen()) {
+        mw->showWindowed();
+    } else if(mw->currentViewMode() == MODE_COLLAGE) {
+        mw->collageBack();
+    } else if(returnToCollage && mw->currentViewMode() == MODE_DOCUMENT) {
+        openCollage();
     }
-    mw->closeFullScreenOrExit();
 }
 
 void Core::openCollage() {

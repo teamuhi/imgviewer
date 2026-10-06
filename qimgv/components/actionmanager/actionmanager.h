@@ -89,7 +89,7 @@ signals:
     void removeFile();
     void copyFile();
     void moveFile();
-    void closeFullScreenOrExit();
+    void closeFullScreen();
     void jumpToFirst();
     void jumpToLast();
     void folderView();

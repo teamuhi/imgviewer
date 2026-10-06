@@ -9,6 +9,8 @@
 #include <QMimeData>
 #include <QImageWriter>
 #include <QWindow>
+#include <QFileInfo>
+#include <QStringList>
 
 #if QT_VERSION < QT_VERSION_CHECK(5, 14, 0)
 #include <QDesktopWidget>
@@ -245,7 +247,6 @@ public slots:
     void showWarning(QString text);
     void showError(QString text);
     void triggerMoveOverlay();
-    void closeFullScreenOrExit();
     void setReturnToCollage(bool enabled);
     void collageBack();
     void close();

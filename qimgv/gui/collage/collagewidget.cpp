@@ -22,6 +22,8 @@
 #include <QImage>
 #include <QGraphicsScene>
 #include <QIcon>
+#include <QPropertyAnimation>
+#include <QEasingCurve>
 #include "settings.h"
 #include "utils/imagelib.h"
 
@@ -37,7 +39,10 @@ const CanvasPreset PRESETS[] = {
     { QT_TR_NOOP("4K UHD  3840 x 2160"),          3840, 2160 },
     { QT_TR_NOOP("Square  1080 x 1080"),          1080, 1080 },
     { QT_TR_NOOP("Portrait 4:5  1080 x 1350"),    1080, 1350 },
+    { QT_TR_NOOP("Portrait 3:4  1080 x 1440"),    1080, 1440 },
     { QT_TR_NOOP("Story 9:16  1080 x 1920"),      1080, 1920 },
+    { QT_TR_NOOP("Mobile 20:9  1080 x 2400"),     1080, 2400 },
+    { QT_TR_NOOP("iPhone  1179 x 2556"),          1179, 2556 },
     { QT_TR_NOOP("A4 portrait  2480 x 3508"),     2480, 3508 },
     { QT_TR_NOOP("A4 landscape  3508 x 2480"),    3508, 2480 },
 };
@@ -46,15 +51,22 @@ const int PRESET_COUNT = sizeof(PRESETS) / sizeof(PRESETS[0]);
 // aspect ratio choices for view tiles (0 = keep the image aspect)
 const qreal VIEW_ASPECTS[] = { 0.0, 1.0, 4.0 / 3.0, 3.0 / 2.0, 16.0 / 9.0, 9.0 / 16.0, 2.0 / 3.0, 3.0 / 4.0 };
 const int VIEW_ASPECT_COUNT = sizeof(VIEW_ASPECTS) / sizeof(VIEW_ASPECTS[0]);
+// canvas shapes of the collage view (width / height, 0 = fill the window); order matches the "Canvas" combo
+const qreal VIEW_SHAPES[] = { 0.0, 16.0 / 9.0, 4.0 / 5.0, 9.0 / 16.0, 1.0 };
+const int VIEW_SHAPE_COUNT = sizeof(VIEW_SHAPES) / sizeof(VIEW_SHAPES[0]);
+// bar slide animation
+const int SLIDE_IN_MS = 180;
+const int SLIDE_OUT_MS = 150;
 // the overlay bar shows up when the cursor is this close to the top edge
 const int OVERLAY_TRIGGER = 70;
 
 const int PANEL_WIDTH = 320;
+// panel card alpha: nearly solid so the text stays readable over any tile, no blur
+const int PANEL_OPACITY = 242;
 // gap between the floating panel and the edges of the view
 const int PANEL_MARGIN = 10;
 // the floating bar only makes room for the panel when this much width is left next to it
 const int BAR_MIN_WIDTH = 360;
-const int BACKDROP_INTERVAL = 40;
 // below this width the properties panel starts hidden
 const int NARROW_WIDTH = 900;
 const qint64 MEMORY_WARNING = 1024LL * 1024 * 1024;
@@ -84,23 +96,6 @@ QIcon themedIcon(const QString &iconName) {
     return QIcon(result);
 }
 
-// cheap blur without extra libraries: a smooth round trip through a tiny copy of the image
-QPixmap blurred(const QPixmap &source) {
-    QImage image = source.toImage();
-    const QSize full = image.size();
-    if(full.isEmpty())
-        return QPixmap();
-    const QSize medium(qMax(1, full.width() / 4), qMax(1, full.height() / 4));
-    const QSize tiny(qMax(1, full.width() / 12), qMax(1, full.height() / 12));
-    auto resize = [](const QImage &img, const QSize &size) {
-        return img.scaled(size, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
-    };
-    image = resize(resize(resize(resize(image, medium), tiny), medium), full);
-    QPixmap result = QPixmap::fromImage(image);
-    result.setDevicePixelRatio(source.devicePixelRatio());
-    return result;
-}
-
 QString megabytes(qint64 bytes) {
     return QString::number(bytes / (1024.0 * 1024.0), 'f', bytes < 10LL * 1024 * 1024 ? 1 : 0) + " MB";
 }
@@ -111,11 +106,6 @@ CollagePanelFrame::CollagePanelFrame(QWidget *parent) : QWidget(parent) {
     setAccessibleName("CollagePanelContainer");
 }
 
-void CollagePanelFrame::setBackdrop(const QPixmap &pixmap) {
-    mBackdrop = pixmap;
-    update();
-}
-
 void CollagePanelFrame::paintEvent(QPaintEvent *) {
     const ColorScheme &colors = settings->colorScheme();
     QPainter painter(this);
@@ -124,11 +114,9 @@ void CollagePanelFrame::paintEvent(QPaintEvent *) {
     QPainterPath path;
     path.addRoundedRect(box, 8, 8);
     painter.setClipPath(path);
-    if(!mBackdrop.isNull())
-        painter.drawPixmap(rect(), mBackdrop);
-    QColor tint = colors.widget;
-    tint.setAlpha(mBackdrop.isNull() ? 235 : 190);
-    painter.fillPath(path, tint);
+    QColor fill = colors.widget;
+    fill.setAlpha(PANEL_OPACITY);
+    painter.fillPath(path, fill);
     painter.setClipping(false);
     painter.setPen(QPen(colors.widget_border, 1));
     painter.setBrush(Qt::NoBrush);
@@ -149,7 +137,6 @@ CollageWidget::CollageWidget(QWidget *parent) : QWidget(parent) {
     connect(settings, &Settings::settingsChanged, this, &CollageWidget::updateButtonIcons);
     connect(mView, &CollageView::animationToggleRequested, this, [this]() { setAnimate(!mScene->animationsEnabled()); });
     setAnimate(settings->collageAnimate());
-    setStaticCanvas(settings->collageStaticCanvas());
 
     QHBoxLayout *body = new QHBoxLayout();
     body->setContentsMargins(0, 0, 0, 0);
@@ -159,8 +146,7 @@ CollageWidget::CollageWidget(QWidget *parent) : QWidget(parent) {
     QVBoxLayout *root = new QVBoxLayout(this);
     root->setContentsMargins(0, 0, 0, 0);
     root->setSpacing(0);
-    root->addWidget(mToolbar);
-    root->addLayout(body, 1);
+    root->addLayout(body, 1); // the editor toolbar floats over the view, see layoutOverlays()
     root->addWidget(mStatusLabel);
 
     connect(mView, &CollageView::filesDropped, this, &CollageWidget::addImages);
@@ -181,18 +167,19 @@ CollageWidget::CollageWidget(QWidget *parent) : QWidget(parent) {
     });
     mView->viewport()->installEventFilter(this);
 
-    mBackdropTimer = new QTimer(this);
-    mBackdropTimer->setSingleShot(true);
-    mBackdropTimer->setInterval(BACKDROP_INTERVAL);
-    connect(mBackdropTimer, &QTimer::timeout, this, &CollageWidget::refreshBackdrop);
-    connect(mScene, &QGraphicsScene::changed, this, [this]() { scheduleBackdrop(); });
-    connect(mView, &CollageView::viewMoved, this, [this]() { scheduleBackdrop(); });
-    connect(settings, &Settings::settingsChanged, this, [this]() {
-        mPanelContainer->update();
-        scheduleBackdrop();
-    });
+    connect(settings, &Settings::settingsChanged, this, [this]() { mPanelContainer->update(); });
 
     mScene->setCanvasSize(QSize(PRESETS[0].width, PRESETS[0].height));
+    {
+        QSignalBlocker blockLayout(mLayoutCombo);
+        mLayoutCombo->setCurrentIndex(settings->collageEditLayout());
+    }
+    applyEditLayout();
+    {
+        QSignalBlocker blockShape(mViewShapeCombo);
+        mViewShapeCombo->setCurrentIndex(settings->collageViewShape());
+    }
+    mScene->setViewShape(VIEW_SHAPES[mViewShapeCombo->currentIndex()]);
     updateStatus();
     applyModeUi(); // the scene starts in view mode
 }
@@ -208,12 +195,12 @@ bool CollageWidget::isEditMode() const {
 void CollageWidget::setMode(CollageMode mode) {
     if(mode == mScene->mode())
         return;
-    // the editor arranges everything the first time it is opened
+    // the editor starts from a mosaic the first time it is opened (the automatic layouts arrange themselves)
     bool firstEdit = (mode == CollageMode::Edit && !mScene->editorInitialized());
     mScene->setMode(mode);
     applyModeUi();
-    if(firstEdit && mScene->imageCount() > 0)
-        onArrange();
+    if(firstEdit && mScene->imageCount() > 0 && mLayoutCombo->currentIndex() == CollageLayout::MODE_FREEFORM)
+        mScene->applyLayout(CollageLayout::MODE_MOSAIC, mGapSpin->value());
     emitInfoIfChanged();
 }
 
@@ -221,15 +208,14 @@ void CollageWidget::setMode(CollageMode mode) {
 void CollageWidget::applyModeUi() {
     bool view = !isEditMode();
     mView->setViewMode(view);
-    mToolbar->setVisible(!view);
     mStatusLabel->setVisible(!view);
     updateLayoutRows();
     bool panel = view ? mViewPanelOpen : (mPanelUserSet ? mEditPanelVisible : width() >= NARROW_WIDTH);
     setPanelVisible(panel);
     updateHelpVisibility();
     updatePanel();
-    updateOverlayVisibility();
     layoutOverlays();
+    updateOverlayVisibility(true); // the bar of the new mode slides in
     mView->setFocus();
 }
 
@@ -237,6 +223,7 @@ void CollageWidget::applyModeUi() {
 void CollageWidget::updateLayoutRows() {
     bool view = !isEditMode();
     bool free = view && mScene->isFreeView();
+    bool freehand = freeLayoutActive();
     for(QWidget *widget : mEditOnlyWidgets)
         widget->setVisible(!view);
     // aspect / size only steer the automatic layouts
@@ -244,14 +231,20 @@ void CollageWidget::updateLayoutRows() {
         widget->setVisible(view && !free);
     for(QWidget *widget : mStackWidgets)
         widget->setVisible(!view || free);
-    // static canvas: the editor frames are laid out automatically, so manual geometry is locked
+    // automatic editor layouts place the frames, so manual geometry is locked
     bool locked = !view && mScene->staticCanvas();
     for(QWidget *widget : mEditOnlyWidgets)
         widget->setEnabled(!locked);
     for(QWidget *widget : mStackWidgets)
         widget->setEnabled(!locked);
-    mArrangeButton->setEnabled(!locked);
     mViewGapSpin->setEnabled(!free); // tiles are placed by hand in Freehand, so there is no gap to apply
+    mViewShapeCombo->setEnabled(!free); // Freehand always uses the whole window
+    mGapSpin->setEnabled(!(!view && freehand));
+    // dragging already pans the picture in the automatic layouts, so Crop only exists for Freehand
+    mViewCropButton->setVisible(free);
+    mEditCropButton->setVisible(!view && freehand);
+    applyCrop();
+    layoutOverlays(); // hidden / shown bar controls change the bar height
 }
 
 //------------------------------------------------------------------------------
@@ -283,6 +276,19 @@ void CollageWidget::buildOverlay() {
         mView->setFocus();
     });
 
+    mViewShapeCombo = new QComboBox(mOverlayBar);
+    mViewShapeCombo->addItems({ tr("Window"), tr("Landscape 16:9"), tr("Portrait 4:5"), tr("Mobile 9:16"), tr("Square 1:1") });
+    mViewShapeCombo->setToolTip(tr("Shape of the collage frame: fill the window, or a landscape / portrait / mobile / square canvas"));
+    mViewShapeCombo->setFocusPolicy(Qt::NoFocus);
+    connect(mViewShapeCombo, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int index) {
+        if(index < 0 || index >= VIEW_SHAPE_COUNT)
+            return;
+        mScene->setViewShape(VIEW_SHAPES[index]);
+        settings->setCollageViewShape(index);
+        mView->fitCanvas();
+        mView->setFocus();
+    });
+
     mViewGapSpin = new QSpinBox(mOverlayBar);
     mViewGapSpin->setRange(0, 100);
     mViewGapSpin->setValue(mScene->viewGap());
@@ -296,6 +302,13 @@ void CollageWidget::buildOverlay() {
     mViewAnimateCheck->setToolTip(tr("Play animated images (GIF, animated WebP / PNG). Space toggles it."));
     mViewAnimateCheck->setFocusPolicy(Qt::NoFocus);
     connect(mViewAnimateCheck, &QCheckBox::toggled, this, &CollageWidget::setAnimate);
+
+    mViewCropButton = new QPushButton(tr("Crop"), mOverlayBar);
+    mViewCropButton->setCheckable(true);
+    mViewCropButton->setToolTip(tr("Crop: drag moves the picture inside its tile, the wheel zooms it (resize handles are off while on)"));
+    mViewCropButton->setFocusPolicy(Qt::NoFocus);
+    mViewCropButton->setVisible(false);
+    connect(mViewCropButton, &QPushButton::toggled, this, &CollageWidget::setCropMode);
 
     mViewPanelButton = new QPushButton(tr("Tile settings"), mOverlayBar);
     mViewPanelButton->setCheckable(true);
@@ -313,21 +326,29 @@ void CollageWidget::buildOverlay() {
     mOverlayLayout->addWidget(backButton);
     mOverlayLayout->addWidget(addButton);
     mOverlayLayout->addWidget(labeled(tr("Layout"), mViewLayoutCombo, mOverlayBar));
+    mOverlayLayout->addWidget(labeled(tr("Canvas"), mViewShapeCombo, mOverlayBar));
     mOverlayLayout->addWidget(labeled(tr("Gap"), mViewGapSpin, mOverlayBar));
     mOverlayLayout->addWidget(mViewAnimateCheck);
+    mOverlayLayout->addWidget(mViewCropButton);
     mOverlayLayout->addWidget(mViewPanelButton);
     mOverlayLayout->addWidget(editButton);
+
+    initSlideBar(mViewBar, mOverlayBar, 780);
+    initSlideBar(mEditBar, mToolbar, 0);
 
     mOverlayTimer = new QTimer(this);
     mOverlayTimer->setSingleShot(true);
     mOverlayTimer->setInterval(2200);
     connect(mOverlayTimer, &QTimer::timeout, this, [this]() {
-        // keep it while it is being used (hover, open combo popup) or while there is nothing to look at
-        if(mOverlayBar->underMouse() || QApplication::activePopupWidget() || mScene->imageCount() == 0) {
+        SlideBar &bar = activeBar();
+        // keep it while it is being used (hover, open popup / dialog, typing in it) or while there is nothing to look at
+        if(!bar.shown)
+            return;
+        if(barInUse(bar) || mScene->imageCount() == 0) {
             mOverlayTimer->start();
             return;
         }
-        mOverlayBar->hide();
+        slideOut(bar);
     });
 
     mEmptyHint = new QLabel(tr("Add images or drop files here"), this);
@@ -361,36 +382,125 @@ void CollageWidget::layoutOverlays() {
         if(room >= BAR_MIN_WIDTH)
             barArea.setWidth(room);
     }
-    int width = qMax(120, qMin(barArea.width() - 20, 780));
-    int height = mOverlayLayout->heightForWidth(width);
-    mOverlayBar->setGeometry(barArea.x() + (barArea.width() - width) / 2, barArea.y() + 10, width, height);
-    mOverlayBar->raise();
+    placeBar(mViewBar, barArea, mOverlayLayout);
+    placeBar(mEditBar, barArea, mToolbarLayout);
+}
+
+//------------------------------------------------------------------------------
+// sliding bars
+void CollageWidget::initSlideBar(SlideBar &bar, QWidget *widget, int maxWidth) {
+    bar.widget = widget;
+    bar.maxWidth = maxWidth;
+    bar.anim = new QPropertyAnimation(widget, "pos", this);
+    widget->hide();
+    // a finished slide-out hides the bar; a slide-in that finished (or was interrupted) leaves shown == true
+    connect(bar.anim, &QPropertyAnimation::finished, this, [&bar]() {
+        if(!bar.shown)
+            bar.widget->hide();
+    });
+}
+
+CollageWidget::SlideBar &CollageWidget::activeBar() {
+    return isEditMode() ? mEditBar : mViewBar;
+}
+
+// the bar stays while it is hovered, a combo popup / modal dialog is open, or a control inside it has the focus
+bool CollageWidget::barInUse(const SlideBar &bar) const {
+    QWidget *focus = QApplication::focusWidget();
+    return bar.widget->underMouse()
+           || QApplication::activePopupWidget()
+           || QApplication::activeModalWidget()
+           || (focus && bar.widget->isAncestorOf(focus));
+}
+
+// computes the resting geometry of a bar; a bar that is on screen (or sliding) follows it
+void CollageWidget::placeBar(SlideBar &bar, const QRect &barArea, WrapLayout *layout) {
+    int maxWidth = bar.maxWidth > 0 ? bar.maxWidth : barArea.width();
+    int width = qMax(120, qMin(barArea.width() - 20, maxWidth));
+    int height = layout->heightForWidth(width);
+    bar.target = QRect(barArea.x() + (barArea.width() - width) / 2, barArea.y() + 10, width, height);
+    bar.widget->resize(bar.target.size());
+    QPoint hidden(bar.target.x(), -height - 2);
+    bool running = bar.anim->state() == QAbstractAnimation::Running;
+    if(bar.shown) {
+        if(running)
+            bar.anim->setEndValue(bar.target.topLeft());
+        else if(bar.widget->isVisible())
+            bar.widget->move(bar.target.topLeft());
+        else
+            bar.widget->move(hidden);
+    } else if(running) {
+        bar.anim->setEndValue(hidden);
+    } else if(!bar.widget->isVisible()) {
+        bar.widget->move(hidden);
+    }
+    if(bar.widget->isVisible())
+        bar.widget->raise();
+}
+
+void CollageWidget::slideIn(SlideBar &bar) {
+    bar.shown = true;
+    bar.anim->stop();
+    QPoint hidden(bar.target.x(), -bar.target.height() - 2);
+    if(!bar.widget->isVisible())
+        bar.widget->move(hidden);
+    bar.widget->show();
+    bar.widget->raise();
+    bar.anim->setDuration(SLIDE_IN_MS);
+    bar.anim->setEasingCurve(QEasingCurve::OutCubic);
+    bar.anim->setStartValue(bar.widget->pos());
+    bar.anim->setEndValue(bar.target.topLeft());
+    bar.anim->start();
+}
+
+void CollageWidget::slideOut(SlideBar &bar) {
+    if(!bar.widget->isVisible()) {
+        bar.shown = false;
+        return;
+    }
+    bar.anim->stop(); // before clearing 'shown': a stop may emit finished()
+    bar.shown = false;
+    bar.anim->setDuration(SLIDE_OUT_MS);
+    bar.anim->setEasingCurve(QEasingCurve::InCubic);
+    bar.anim->setStartValue(bar.widget->pos());
+    bar.anim->setEndValue(QPoint(bar.target.x(), -bar.target.height() - 2));
+    bar.anim->start();
+}
+
+void CollageWidget::hideBarNow(SlideBar &bar) {
+    bar.shown = false;
+    bar.anim->stop();
+    bar.widget->hide();
 }
 
 void CollageWidget::showOverlay() {
-    if(isEditMode())
+    SlideBar &bar = activeBar();
+    if(bar.shown) {
+        mOverlayTimer->start(); // already out: just keep it a while longer
         return;
+    }
     layoutOverlays();
-    mOverlayBar->show();
-    mOverlayBar->raise();
+    slideIn(bar);
     mOverlayTimer->start();
 }
 
-void CollageWidget::updateOverlayVisibility() {
+// reveal: slide the bar of the current mode in from the top (mode switch / collage shown) and arm the auto-hide
+void CollageWidget::updateOverlayVisibility(bool reveal) {
     bool view = !isEditMode();
-    if(!view) {
-        mOverlayBar->hide();
-        mEmptyHint->hide();
-        mOverlayTimer->stop();
-        return;
-    }
+    SlideBar &active = view ? mViewBar : mEditBar;
+    hideBarNow(view ? mEditBar : mViewBar);
     bool empty = (mScene->imageCount() == 0);
-    mEmptyHint->setVisible(empty);
-    if(empty) {
+    mEmptyHint->setVisible(view && empty);
+    if(reveal) {
+        hideBarNow(active);
         layoutOverlays();
-        mOverlayBar->show();
-        mOverlayBar->raise();
-    } else if(mOverlayBar->isVisible() && !mOverlayTimer->isActive()) {
+        slideIn(active);
+        mOverlayTimer->start();
+    } else if(empty) {
+        layoutOverlays();
+        if(!active.shown)
+            slideIn(active);
+    } else if(active.shown && !mOverlayTimer->isActive()) {
         mOverlayTimer->start();
     }
 }
@@ -398,11 +508,12 @@ void CollageWidget::updateOverlayVisibility() {
 bool CollageWidget::eventFilter(QObject *watched, QEvent *event) {
     if(watched == mView->viewport()) {
         if(event->type() == QEvent::MouseMove) {
-            if(!isEditMode() && static_cast<QMouseEvent*>(event)->pos().y() < OVERLAY_TRIGGER)
+            auto *move = static_cast<QMouseEvent*>(event);
+            // near the top edge, and not while a drag (pan / move / rubber band) is going on
+            if(move->pos().y() < OVERLAY_TRIGGER && move->buttons() == Qt::NoButton)
                 showOverlay();
         } else if(event->type() == QEvent::Resize) {
             layoutOverlays();
-            scheduleBackdrop();
         }
     }
     return QWidget::eventFilter(watched, event);
@@ -444,7 +555,9 @@ QWidget *CollageWidget::labeled(const QString &text, QWidget *control, QWidget *
 void CollageWidget::buildToolbar() {
     mToolbar = new QWidget(this);
     mToolbar->setAccessibleName("CollageToolbar");
-    WrapLayout *layout = new WrapLayout(mToolbar, 8, 12, 6);
+    mToolbarLayout = new WrapLayout(mToolbar, 8, 12, 6);
+    WrapLayout *layout = mToolbarLayout;
+    mToolbar->hide();
 
     auto makeButton = [this](const QString &text, const QString &tip, const QString &iconName = QString()) {
         QPushButton *button = new QPushButton(text, mToolbar);
@@ -455,6 +568,10 @@ void CollageWidget::buildToolbar() {
         return button;
     };
 
+    QPushButton *viewButton = makeButton(tr("Back to collage view"), tr("Back to the collage view (E)"), "buttons/panel/back20");
+    connect(viewButton, &QPushButton::clicked, this, [this]() { setMode(CollageMode::View); });
+    layout->addWidget(viewButton);
+
     QPushButton *addButton = makeButton(tr("Add images..."), tr("Add more images to the collage (you can also drop files here)"));
     QPushButton *newButton = makeButton(tr("New"), tr("Remove all images and start over"));
     connect(addButton, &QPushButton::clicked, this, &CollageWidget::onAddImages);
@@ -464,26 +581,25 @@ void CollageWidget::buildToolbar() {
 
     // layout
     mLayoutCombo = new QComboBox(mToolbar);
-    mLayoutCombo->addItems({ tr("Mosaic"), tr("Grid"), tr("Row"), tr("Column") });
+    mLayoutCombo->addItems({ tr("Mosaic"), tr("Grid"), tr("Row"), tr("Column"), tr("Freehand") });
+    mLayoutCombo->setToolTip(tr("Mosaic, Grid, Row and Column arrange the images for you (drag pans the picture, Ctrl+drag swaps two frames). "
+                                "Freehand lets you move and resize every frame yourself."));
     mGapSpin = new QSpinBox(mToolbar);
     mGapSpin->setRange(0, 400);
     mGapSpin->setValue(12);
     mGapSpin->setSuffix(" px");
     mGapSpin->setKeyboardTracking(false);
     mGapSpin->setToolTip(tr("Spacing between images and around the edges"));
-    mArrangeButton = makeButton(tr("Arrange"), tr("Re-arrange all images with the selected layout (resets crops)"));
-    connect(mArrangeButton, &QPushButton::clicked, this, &CollageWidget::onArrange);
-    mStaticCheck = new QCheckBox(tr("Static canvas"), mToolbar);
-    mStaticCheck->setToolTip(tr("Lock the layout: images stay in the automatic Layout / Gap arrangement, no free moving or resizing. "
-                                "Drag still moves the picture inside its frame, Ctrl+drag swaps two frames."));
-    mStaticCheck->setFocusPolicy(Qt::NoFocus);
-    connect(mStaticCheck, &QCheckBox::toggled, this, &CollageWidget::setStaticCanvas);
-    connect(mLayoutCombo, qOverload<int>(&QComboBox::currentIndexChanged), this, [this]() { applyStaticLayout(); });
-    connect(mGapSpin, qOverload<int>(&QSpinBox::valueChanged), this, [this]() { applyStaticLayout(); });
+    connect(mLayoutCombo, qOverload<int>(&QComboBox::currentIndexChanged), this, [this]() { applyEditLayout(); });
+    connect(mGapSpin, qOverload<int>(&QSpinBox::valueChanged), this, [this]() { applyEditLayout(); });
     layout->addWidget(labeled(tr("Layout"), mLayoutCombo, mToolbar));
     layout->addWidget(labeled(tr("Gap"), mGapSpin, mToolbar));
-    layout->addWidget(mArrangeButton);
-    layout->addWidget(mStaticCheck);
+
+    mEditCropButton = makeButton(tr("Crop"), tr("Crop: drag moves the picture inside its frame, the wheel zooms it (resize handles are off while on)"));
+    mEditCropButton->setCheckable(true);
+    mEditCropButton->setVisible(false);
+    connect(mEditCropButton, &QPushButton::toggled, this, &CollageWidget::setCropMode);
+    layout->addWidget(mEditCropButton);
 
     // canvas
     mPresetCombo = new QComboBox(mToolbar);
@@ -530,13 +646,10 @@ void CollageWidget::buildToolbar() {
         mPanelUserSet = true;
         setPanelVisible(checked);
     });
-    QPushButton *viewButton = makeButton(tr("View"), tr("Back to the collage view (E)"), "buttons/panel/back20");
-    connect(viewButton, &QPushButton::clicked, this, [this]() { setMode(CollageMode::View); });
     mAnimateCheck = new QCheckBox(tr("Animate"), mToolbar);
     mAnimateCheck->setToolTip(tr("Play animated images (GIF, animated WebP / PNG). Export always uses the first frame."));
     mAnimateCheck->setFocusPolicy(Qt::NoFocus);
     connect(mAnimateCheck, &QCheckBox::toggled, this, &CollageWidget::setAnimate);
-    layout->addWidget(viewButton);
     layout->addWidget(fitButton);
     layout->addWidget(mAnimateCheck);
     layout->addWidget(mPanelToggle);
@@ -549,7 +662,7 @@ void CollageWidget::buildPanel() {
     mPanelScroll->setWidgetResizable(true);
     mPanelScroll->setFrameShape(QFrame::NoFrame);
     mPanelScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    mPanelScroll->viewport()->setAutoFillBackground(false); // the blurred backdrop shows through
+    mPanelScroll->viewport()->setAutoFillBackground(false); // the card behind paints the background
 
     mPanelContent = new QWidget();
     mPanelContent->setAccessibleName("CollagePanel");
@@ -658,7 +771,8 @@ void CollageWidget::buildPanel() {
     mCropModeButton = new QPushButton(tr("Crop mode"), mPanelContent);
     mCropModeButton->setCheckable(true);
     mCropModeButton->setFocusPolicy(Qt::NoFocus);
-    mCropModeButton->setToolTip(tr("While on, dragging inside a frame moves the picture under it (always on in the collage view). Shift+wheel zooms."));
+    mCropModeButton->setToolTip(tr("Crop (Freehand layouts): while on, dragging inside a frame moves the picture under it and the wheel zooms it. "
+                                   "The automatic layouts always work this way. Shift+wheel zooms in any case."));
     QPushButton *resetCropButton = new QPushButton(tr("Reset crop"), mPanelContent);
     resetCropButton->setFocusPolicy(Qt::NoFocus);
     grid->addWidget(pairRow(mCropModeButton, resetCropButton), row++, 0, 1, 3);
@@ -841,10 +955,7 @@ void CollageWidget::buildPanel() {
             item->setContentZoom(value / 100.0);
         mZoomValueLabel->setText(QString::number(value) + "%");
     });
-    connect(mCropModeButton, &QPushButton::toggled, this, [this](bool on) {
-        for(CollageItem *item : mScene->collageItems())
-            item->setCropMode(on);
-    });
+    connect(mCropModeButton, &QPushButton::toggled, this, &CollageWidget::setCropMode);
     connect(resetCropButton, &QPushButton::clicked, this, [this]() {
         for(CollageItem *item : targets())
             item->resetCrop();
@@ -961,7 +1072,7 @@ void CollageWidget::updatePanel() {
     if(!item) {
         mNameLabel->setText(tr("No image selected"));
         if(isEditMode() && mScene->staticCanvas())
-            mInfoLabel->setText(tr("Static canvas: images follow the Layout / Gap above. Drag moves the picture inside its frame, "
+            mInfoLabel->setText(tr("Auto layout: images follow the Layout / Gap above. Drag moves the picture inside its frame, "
                                    "Ctrl+drag swaps two frames. Wheel zooms the view, middle-drag pans."));
         else if(isEditMode())
             mInfoLabel->setText(tr("Click an image on the canvas to edit it. Drag to move, use the handles to resize "
@@ -1000,7 +1111,7 @@ void CollageWidget::updatePanel() {
     mZoomValueLabel->setText(QString::number(zoom) + "%");
     // zoom / pan only exist in Fill mode
     mZoomSlider->setEnabled(item->fit() == CollageFit::Fill);
-    mCropModeButton->setEnabled(item->fit() == CollageFit::Fill);
+    mCropModeButton->setEnabled(item->fit() == CollageFit::Fill && freeLayoutActive());
     int opacity = qRound(item->opacity() * 100.0);
     mOpacitySlider->setValue(opacity);
     mOpacityValueLabel->setText(QString::number(opacity) + "%");
@@ -1047,14 +1158,15 @@ void CollageWidget::addImages(const QStringList &paths) {
     for(const QString &path : paths) {
         CollageItem *item = mScene->addImage(path, !wasEmpty);
         if(item) {
-            item->setCropMode(mCropModeButton->isChecked());
+            item->setCropMode(mCropOn && freeLayoutActive());
             added++;
         } else {
             failed++;
         }
     }
-    if(wasEmpty && added > 0)
-        mScene->applyLayout(static_cast<CollageLayout::Mode>(mLayoutCombo->currentIndex()), mGapSpin->value());
+    // the automatic layouts arrange new images by themselves; Freehand starts from a mosaic
+    if(wasEmpty && added > 0 && mLayoutCombo->currentIndex() == CollageLayout::MODE_FREEFORM)
+        mScene->applyLayout(CollageLayout::MODE_MOSAIC, mGapSpin->value());
     if(failed > 0)
         setNotice(tr("%1 file(s) could not be read as images.").arg(failed), true);
     else
@@ -1092,10 +1204,6 @@ void CollageWidget::onNewCollage() {
     }
     mScene->clearCollage();
     setNotice(QString());
-}
-
-void CollageWidget::onArrange() {
-    mScene->applyLayout(static_cast<CollageLayout::Mode>(mLayoutCombo->currentIndex()), mGapSpin->value());
 }
 
 //------------------------------------------------------------------------------
@@ -1143,22 +1251,42 @@ void CollageWidget::setAnimate(bool enabled) {
     updatePanel();
 }
 
-void CollageWidget::applyStaticLayout() {
-    mScene->setStaticLayout(static_cast<CollageLayout::Mode>(mLayoutCombo->currentIndex()), mGapSpin->value());
-}
-
-// static canvas: editor frames follow the Layout / Gap toolbar values instead of free placement
-void CollageWidget::setStaticCanvas(bool enabled) {
-    {
-        QSignalBlocker block(mStaticCheck);
-        mStaticCheck->setChecked(enabled);
-    }
-    settings->setCollageStaticCanvas(enabled);
-    applyStaticLayout();
-    mScene->setStaticCanvas(enabled);
+// editor layout combo: Mosaic / Grid / Row / Column arrange the frames automatically, Freehand frees them
+void CollageWidget::applyEditLayout() {
+    int index = mLayoutCombo->currentIndex();
+    if(index < 0)
+        return;
+    bool freehand = (index == CollageLayout::MODE_FREEFORM);
+    // layout first, then the flag: switching from Freehand relayouts exactly once
+    if(!freehand)
+        mScene->setStaticLayout(static_cast<CollageLayout::Mode>(index), mGapSpin->value());
+    mScene->setStaticCanvas(!freehand);
+    settings->setCollageEditLayout(index);
     updateLayoutRows();
     updatePanel();
-    mView->setFocus();
+}
+
+// one crop state for the three Crop buttons (view bar, editor toolbar, panel)
+void CollageWidget::setCropMode(bool on) {
+    mCropOn = on;
+    for(QPushButton *button : {mViewCropButton, mEditCropButton, mCropModeButton}) {
+        QSignalBlocker block(button);
+        button->setChecked(on);
+    }
+    applyCrop();
+    updatePanel();
+}
+
+// Crop only has an effect while the frames are placed by hand
+bool CollageWidget::freeLayoutActive() const {
+    return isEditMode() ? !mScene->staticCanvas() : mScene->isFreeView();
+}
+
+void CollageWidget::applyCrop() {
+    bool effective = mCropOn && freeLayoutActive();
+    mView->setCropMode(effective);
+    for(CollageItem *item : mScene->collageItems())
+        item->setCropMode(effective);
 }
 
 void CollageWidget::onCanvasColorChanged() {
@@ -1296,6 +1424,8 @@ QString CollageWidget::helpHtml(bool edit) {
             { tr("E"), tr("switch to the editor") } });
         html += section(tr("Features"), {
             { tr("Layout"), tr("Mosaic, Grid, Row, Column or Freehand") },
+            { tr("Canvas"), tr("frame shape: Window, 16:9, 4:5, mobile 9:16 or square (not used by Freehand)") },
+            { tr("Crop (Freehand)"), tr("drag moves the picture inside the tile, wheel zooms it, handles are off") },
             { tr("Gap"), tr("spacing between tiles (not used by Freehand)") },
             { tr("Aspect"), tr("shape of the selected tile (Original, 1:1, 4:3, 16:9, ...)") },
             { tr("Size"), tr("how much room the tile takes in the mosaic") },
@@ -1336,9 +1466,9 @@ QString CollageWidget::helpHtml(bool edit) {
             { tr("+ / -"), tr("zoom the canvas") },
             { tr("E"), tr("back to the collage view") } });
         html += section(tr("Features"), {
-            { tr("Layout + Arrange"), tr("re-arrange everything (resets crops)") },
-            { tr("Static canvas"), tr("lock the arrangement to the Layout / Gap (no free placement)") },
-            { tr("Canvas"), tr("size presets or custom width / height") },
+            { tr("Layout"), tr("Mosaic, Grid, Row and Column arrange the frames automatically, Freehand = place them yourself") },
+            { tr("Crop (Freehand)"), tr("drag moves the picture inside its frame, wheel zooms it, handles are off") },
+            { tr("Canvas"), tr("size presets (incl. portrait / mobile) or custom width / height") },
             { tr("Background / Transparent"), tr("canvas colour, PNG / WebP keep transparency") },
             { tr("X, Y, W, H"), tr("exact position and size of a frame") },
             { tr("Fit to border / Center"), tr("snap a frame to the canvas") },
@@ -1374,32 +1504,13 @@ void CollageWidget::setPanelVisible(bool visible) {
     }
     // the panel floats, so the view keeps its size, zoom and tiles; only the bar may move aside
     layoutOverlays();
-    if(visible)
-        refreshBackdrop();
-}
-
-void CollageWidget::scheduleBackdrop() {
-    if(mPanelContainer->isVisible() && !mBackdropTimer->isActive())
-        mBackdropTimer->start();
-}
-
-// blurred copy of the part of the collage under the panel
-void CollageWidget::refreshBackdrop() {
-    if(!mPanelContainer->isVisible())
-        return;
-    QWidget *viewport = mView->viewport();
-    QRect area(viewport->mapFrom(this, mPanelContainer->pos()), mPanelContainer->size());
-    area &= viewport->rect();
-    if(area.isEmpty())
-        return;
-    // the panel is a sibling of the view, so it is not part of the grab
-    mPanelContainer->setBackdrop(blurred(viewport->grab(area)));
 }
 
 // animations only run while the collage is on screen
 void CollageWidget::showEvent(QShowEvent *event) {
     QWidget::showEvent(event);
     mScene->setAnimationsActive(true);
+    updateOverlayVisibility(true);
 }
 
 void CollageWidget::hideEvent(QHideEvent *event) {

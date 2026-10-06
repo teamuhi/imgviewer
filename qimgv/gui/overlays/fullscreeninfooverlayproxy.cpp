@@ -2,13 +2,16 @@
 
 FullscreenInfoOverlayProxy::FullscreenInfoOverlayProxy(FloatingWidgetContainer *parent)
     : container(parent),
-      infoOverlay(nullptr)
+      infoOverlay(nullptr),
+      statsOverlay(nullptr)
 {
 }
 
 FullscreenInfoOverlayProxy::~FullscreenInfoOverlayProxy() {
     if(infoOverlay)
         infoOverlay->deleteLater();
+    if(statsOverlay)
+        statsOverlay->deleteLater();
 }
 
 void FullscreenInfoOverlayProxy::show() {
@@ -19,14 +22,18 @@ void FullscreenInfoOverlayProxy::show() {
 void FullscreenInfoOverlayProxy::showWhenReady() {
     if(!infoOverlay)
         stateBuf.showImmediately = true;
-    else
+    else {
         infoOverlay->show();
+        statsOverlay->setRequested(true);
+    }
 }
 
 void FullscreenInfoOverlayProxy::hide() {
     stateBuf.showImmediately = false;
-    if(infoOverlay)
+    if(infoOverlay) {
         infoOverlay->hide();
+        statsOverlay->setRequested(false);
+    }
 }
 
 void FullscreenInfoOverlayProxy::setInfo(QString _position, QString _fileName, QString _info) {
@@ -43,8 +50,11 @@ void FullscreenInfoOverlayProxy::init() {
     if(infoOverlay)
         return;
     infoOverlay = new FullscreenInfoOverlay(container);
+    statsOverlay = new FullscreenStatsOverlay(container);
     if(!stateBuf.fileName.isEmpty())
         setInfo(stateBuf.position, stateBuf.fileName, stateBuf.info);
-    if(stateBuf.showImmediately)
+    if(stateBuf.showImmediately) {
         infoOverlay->show();
+        statsOverlay->setRequested(true);
+    }
 }

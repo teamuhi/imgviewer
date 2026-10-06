@@ -1,4 +1,6 @@
 #include "documentinfo.h"
+#include <QFile>
+#include <QtEndian>
 
 DocumentInfo::DocumentInfo(QString path)
     : mDocumentType(DocumentType::NONE),
@@ -71,12 +73,60 @@ int DocumentInfo::exifOrientation() const {
 // ##############################################################
 // ####################### PRIVATE METHODS ######################
 // ##############################################################
+namespace {
+// Identify common image formats by their magic bytes, ignoring the file extension.
+// Returns an empty string when nothing matches (caller falls back to QMimeDatabase).
+QByteArray sniffImageMime(const QString &path) {
+    QFile f(path);
+    if(!f.open(QFile::ReadOnly))
+        return QByteArray();
+    const QByteArray head = f.read(1024);
+    if(head.size() < 4)
+        return QByteArray();
+    auto starts = [&head](const char *magic, int len, int offset = 0) {
+        return head.size() >= offset + len && memcmp(head.constData() + offset, magic, len) == 0;
+    };
+    if(starts("\xFF\xD8\xFF", 3))
+        return "image/jpeg";
+    if(starts("\x89PNG\r\n\x1A\n", 8))
+        return "image/png";
+    if(starts("GIF8", 4))
+        return "image/gif";
+    if(starts("RIFF", 4) && starts("WEBP", 4, 8))
+        return "image/webp";
+    if(starts("II*\0", 4) || starts("MM\0*", 4) || starts("II+\0", 4) || starts("MM\0+", 4))
+        return "image/tiff";
+    if(starts("\x00\x00\x01\x00", 4))
+        return "image/vnd.microsoft.icon";
+    if(starts("\xFF\x0A", 2) || starts("\x00\x00\x00\x0CJXL \r\n\x87\n", 12))
+        return "image/jxl";
+    if(starts("ftyp", 4, 4) && (starts("avif", 4, 8) || starts("avis", 4, 8)))
+        return "image/avif";
+    if(starts("BM", 2) && head.size() >= 18) {
+        // 'BM' alone is too weak; also check for a known DIB header size
+        const quint32 dib = qFromLittleEndian<quint32>(reinterpret_cast<const uchar*>(head.constData()) + 14);
+        if(dib == 12 || dib == 40 || dib == 52 || dib == 56 || dib == 64 || dib == 108 || dib == 124)
+            return "image/bmp";
+    }
+    // svg is xml text, look for the root element near the start
+    if(head.contains("<svg") && (head.contains("<?xml") || head.trimmed().startsWith("<")))
+        return "image/svg+xml";
+    return QByteArray();
+}
+} // namespace
+
 void DocumentInfo::detectFormat() {
     if(mDocumentType != DocumentType::NONE)
         return;
     QMimeDatabase mimeDb;
-    mMimeType = mimeDb.mimeTypeForFile(fileInfo.filePath(), QMimeDatabase::MatchContent);
-    auto mimeName = mMimeType.name().toUtf8();
+    // The file content decides, not the extension (e.g. a webp renamed to .png)
+    QByteArray mimeName = sniffImageMime(fileInfo.filePath());
+    if(mimeName.isEmpty()) {
+        mMimeType = mimeDb.mimeTypeForFile(fileInfo.filePath(), QMimeDatabase::MatchContent);
+        mimeName = mMimeType.name().toUtf8();
+    } else {
+        mMimeType = mimeDb.mimeTypeForName(QString::fromUtf8(mimeName));
+    }
     auto suffix = fileInfo.suffix().toLower().toUtf8();
     if(mimeName == "image/jpeg") {
         mFormat = "jpg";
@@ -108,18 +158,30 @@ void DocumentInfo::detectFormat() {
     } else if(mimeName == "image/bmp") {
         mFormat = "bmp";
         mDocumentType = DocumentType::STATIC;
+    } else if(mimeName == "image/tiff") {
+        mFormat = "tiff";
+        mDocumentType = DocumentType::STATIC;
+    } else if(mimeName == "image/svg+xml") {
+        mFormat = (suffix == "svgz") ? "svgz" : "svg";
+        mDocumentType = DocumentType::STATIC;
     } else if(settings->videoPlayback() && settings->videoFormats().contains(mimeName)) {
         mDocumentType = DocumentType::VIDEO;
         mFormat = settings->videoFormats().value(mimeName);
-    } else {
-        // just try to open via suffix if all of the above fails
+    } else if(settings->videoPlayback() && settings->videoFormats().values().contains(suffix)) {
         mFormat = suffix;
+        mDocumentType = DocumentType::VIDEO;
+    } else {
+        // Unknown mime: let Qt pick a plugin by content (a wrong extension must not win),
+        // and only then fall back to the suffix.
+        QImageReader probe(fileInfo.filePath());
+        probe.setDecideFormatFromContent(true);
+        if(probe.canRead() && !probe.format().isEmpty())
+            mFormat = probe.format();
+        else
+            mFormat = suffix;
         if(mFormat.compare("jfif", Qt::CaseInsensitive) == 0)
             mFormat = "jpg";
-        if(settings->videoPlayback() && settings->videoFormats().values().contains(suffix))
-            mDocumentType = DocumentType::VIDEO;
-        else
-            mDocumentType = DocumentType::STATIC;
+        mDocumentType = DocumentType::STATIC;
     }
     loadExifOrientation();
 }

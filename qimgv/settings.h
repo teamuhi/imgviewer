@@ -297,8 +297,10 @@ public:
 
     bool jxlAnimation();
     bool collageAnimate();
-    bool collageStaticCanvas();
-    void setCollageStaticCanvas(bool mode);
+    int collageEditLayout();
+    void setCollageEditLayout(int mode);
+    int collageViewShape();
+    void setCollageViewShape(int shape);
     void setCollageAnimate(bool mode);
     void setJxlAnimation(bool mode);
     bool absoluteZoomStep();

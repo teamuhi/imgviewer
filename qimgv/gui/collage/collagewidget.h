@@ -10,7 +10,7 @@
 #include <QScrollArea>
 #include <QStringList>
 #include <QTimer>
-#include <QPixmap>
+#include <QRect>
 #include "gui/collage/collagescene.h"
 #include "gui/collage/collageview.h"
 #include "gui/customwidgets/colorselectorbutton.h"
@@ -19,18 +19,15 @@
 //  View - tiles fill the window, minimal auto-hiding bar, drag to swap, zoom / pan tiles
 //  Edit - fixed canvas with free frames, toolbar, per-image properties, export
 class WrapLayout;
+class QPropertyAnimation;
 
-// Floating card for the properties panel: paints a blurred copy of the collage behind it, tinted with the theme
+// Floating card for the properties panel: a rounded, theme-tinted overlay painted over the collage
 class CollagePanelFrame : public QWidget {
 public:
     explicit CollagePanelFrame(QWidget *parent = nullptr);
-    void setBackdrop(const QPixmap &pixmap);
 
 protected:
     void paintEvent(QPaintEvent *event) override;
-
-private:
-    QPixmap mBackdrop;
 };
 
 class CollageWidget : public QWidget {
@@ -63,7 +60,6 @@ protected:
 private slots:
     void onAddImages();
     void onNewCollage();
-    void onArrange();
     void onPresetChanged(int index);
     void onCanvasSpinChanged();
     void onCanvasColorChanged();
@@ -81,9 +77,9 @@ private:
     QComboBox *mLayoutCombo, *mPresetCombo;
     QSpinBox *mGapSpin, *mCanvasWidthSpin, *mCanvasHeightSpin;
     ColorSelectorButton *mBackgroundButton;
-    QCheckBox *mTransparentCheck, *mAnimateCheck, *mStaticCheck;
-    QPushButton *mArrangeButton;
-    QPushButton *mPanelToggle;
+    QCheckBox *mTransparentCheck, *mAnimateCheck;
+    QPushButton *mPanelToggle, *mEditCropButton;
+    WrapLayout *mToolbarLayout;
 
     // properties panel
     CollagePanelFrame *mPanelContainer; // floats over the view: header (hide button) + scroll area
@@ -105,17 +101,18 @@ private:
     // view mode chrome
     QWidget *mOverlayBar;
     WrapLayout *mOverlayLayout;
-    QComboBox *mViewLayoutCombo, *mViewAspectCombo;
+    QComboBox *mViewLayoutCombo, *mViewAspectCombo, *mViewShapeCombo;
     QSpinBox *mViewGapSpin;
     QCheckBox *mViewAnimateCheck;
     QSlider *mViewSizeSlider;
     QLabel *mViewSizeValueLabel, *mEmptyHint;
-    QPushButton *mViewPanelButton;
-    QTimer *mOverlayTimer, *mBackdropTimer;
+    QPushButton *mViewPanelButton, *mViewCropButton;
+    QTimer *mOverlayTimer;
     QList<QPair<QPushButton*, QString>> mIconButtons; // re-tinted when the theme changes
     QList<QWidget*> mEditOnlyWidgets, mViewOnlyWidgets; // panel rows that only make sense in one mode
     QList<QWidget*> mStackWidgets; // front / back: editor and the Freehand view layout
     bool mViewPanelOpen = false, mEditPanelVisible = true;
+    bool mCropOn = false; // the Crop toggle (only takes effect in Freehand layouts)
     int mLastInfoKey = -1;
 
     QLabel *mStatusLabel;
@@ -124,6 +121,23 @@ private:
     bool mSyncing = false;
     bool mPanelUserSet = false;
 
+    // a bar that floats at the top of the view and slides in / out (view overlay bar, editor toolbar)
+    struct SlideBar {
+        QWidget *widget = nullptr;
+        QPropertyAnimation *anim = nullptr;
+        QRect target;        // resting geometry, in this widget's coordinates
+        bool shown = false;  // wanted state; the animation may still be on its way
+        int maxWidth = 0;    // 0 = as wide as the available area
+    };
+    SlideBar mViewBar, mEditBar;
+
+    void initSlideBar(SlideBar &bar, QWidget *widget, int maxWidth);
+    void placeBar(SlideBar &bar, const QRect &barArea, WrapLayout *layout);
+    void slideIn(SlideBar &bar);
+    void slideOut(SlideBar &bar);
+    void hideBarNow(SlideBar &bar);
+    SlideBar &activeBar();
+    bool barInUse(const SlideBar &bar) const;
     void buildToolbar();
     void buildPanel();
     void buildOverlay();
@@ -131,10 +145,8 @@ private:
     void updateLayoutRows();
     void layoutOverlays();
     void layoutPanel();
-    void scheduleBackdrop();
-    void refreshBackdrop();
     void showOverlay();
-    void updateOverlayVisibility();
+    void updateOverlayVisibility(bool reveal = false);
     void emitInfoIfChanged();
     QWidget *labeled(const QString &text, QWidget *control, QWidget *parent);
     void setButtonIcon(QPushButton *button, const QString &iconName);
@@ -142,8 +154,10 @@ private:
     QList<CollageItem*> targets() const;
     void applyCanvasSize();
     void setAnimate(bool enabled);
-    void setStaticCanvas(bool enabled);
-    void applyStaticLayout();
+    void applyEditLayout();
+    void setCropMode(bool on);
+    void applyCrop();
+    bool freeLayoutActive() const;
     void applyGeometry(int source);
     void setNotice(const QString &text, bool warning = false);
     void updateStatus();

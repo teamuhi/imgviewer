@@ -16,7 +16,15 @@ MW::MW(QWidget *parent)
       cropPanel(nullptr),
       cropOverlay(nullptr)
 {
-    setAttribute(Qt::WA_TranslucentBackground, true);
+    // A translucent top level window is a layered window on Windows: while resizing, the frame / desktop
+    // flashes through between repaints. Only pay for it when the background is actually see-through.
+    // (applied at startup; changing the background opacity needs a restart to switch modes)
+    if(settings->backgroundOpacity() < 1.0) {
+        setAttribute(Qt::WA_TranslucentBackground, true);
+    } else {
+        setAttribute(Qt::WA_OpaquePaintEvent, true); // paintEvent() fills the whole window
+        setAutoFillBackground(false);
+    }
     rootLayout.setContentsMargins(0,0,0,0);
     rootLayout.setSpacing(0);
     layout.setContentsMargins(0,0,0,0);
@@ -836,15 +844,6 @@ void MW::triggerMoveOverlay() {
     }
 }
 
-// quit fullscreen or exit the program
-void MW::closeFullScreenOrExit() {
-    if(this->isFullScreen()) {
-        this->showWindowed();
-    } else {
-        actionManager->invokeAction("exit");
-    }
-}
-
 void MW::setReturnToCollage(bool enabled) {
     if(returnToCollage == enabled)
         return;
@@ -945,7 +944,25 @@ void MW::onInfoUpdated() {
             windowTitle.prepend("* ");
 
         infoBarFullscreen->setInfo(posString, info.fileName + (info.edited ? "  *" : ""), resString + "  " + sizeString);
-        infoBarWindowed->setInfo(posString, info.fileName + (info.edited ? "  *" : ""), resString + "  " + sizeString + " " + states);
+        // the top bar already shows index / name / resolution / size / states: the bottom bar shows the rest
+        QFileInfo fileInfo(info.filePath);
+        QStringList details;
+        if(!fileInfo.suffix().isEmpty())
+            details << fileInfo.suffix().toUpper();
+        if(fileInfo.exists())
+            details << tr("modified %1").arg(locale().toString(fileInfo.lastModified(), QLocale::ShortFormat));
+        QStringList shape;
+        if(info.imageSize.width() > 0 && info.imageSize.height() > 0) {
+            const int w = info.imageSize.width(), h = info.imageSize.height();
+            shape << tr("%1 MP").arg(QString::number(double(w) * h / 1000000.0, 'f', w * h < 100000 ? 2 : 1));
+            int g = w, rest = h;
+            while(rest) { const int t = g % rest; g = rest; rest = t; } // gcd
+            if(w / g <= 32 && h / g <= 32) // 16:9, 4:3, 1:1; odd sizes get a decimal ratio instead
+                shape << QString("%1:%2").arg(w / g).arg(h / g);
+            else
+                shape << QString("%1:1").arg(double(w) / h, 0, 'f', 2);
+        }
+        infoBarWindowed->setInfo(info.directoryName, details.join("  ·  "), shape.join("  ·  "));
         topBar->setInfo(posString, info.fileName + (info.edited ? "  *" : ""), resString + "  " + sizeString + " " + states);
     }
     setWindowTitle(windowTitle);

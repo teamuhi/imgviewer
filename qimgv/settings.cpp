@@ -2,6 +2,37 @@
 
 Settings *settings = nullptr;
 
+#if !defined(__linux__) && !defined(__FreeBSD__)
+namespace {
+// QFileInfo::isWritable() ignores Windows ACLs, so really try to create a file.
+// "Program Files" is read-only for normal users: settings written there silently vanish.
+bool canWriteTo(const QString &dirPath) {
+    QDir dir(dirPath);
+    if(!dir.mkpath(dirPath))
+        return false;
+    QFile probe(dir.absoluteFilePath(".qimgv_write_test"));
+    if(!probe.open(QIODevice::WriteOnly))
+        return false;
+    probe.close();
+    probe.remove();
+    return true;
+}
+
+// portable layout (next to the exe) when that folder is writable, otherwise a per-user folder
+QString writableDir(const QString &portablePath, QStandardPaths::StandardLocation fallbackLocation, const QString &subDir) {
+    if(canWriteTo(portablePath))
+        return portablePath;
+    QString base = QStandardPaths::writableLocation(fallbackLocation);
+    if(base.isEmpty())
+        base = QDir::homePath() + "/.qimgv";
+    QString path = subDir.isEmpty() ? base : base + "/" + subDir;
+    QDir().mkpath(path);
+    qDebug() << portablePath << "is not writable, using" << path;
+    return path;
+}
+}
+#endif
+
 Settings::Settings(QObject *parent) : QObject(parent) {
 #if defined(__linux__) || defined(__FreeBSD__)
     // config files
@@ -10,8 +41,17 @@ Settings::Settings(QObject *parent) : QObject(parent) {
     stateConf = new QSettings(QCoreApplication::organizationName(), "savedState");
     themeConf = new QSettings(QCoreApplication::organizationName(), "theme");
 #else
-    mConfDir = new QDir(QApplication::applicationDirPath() + "/conf");
-    mConfDir->mkpath(QApplication::applicationDirPath() + "/conf");
+    const QString portableConf = QApplication::applicationDirPath() + "/conf";
+    mConfDir = new QDir(writableDir(portableConf, QStandardPaths::AppConfigLocation, QString()));
+    if(mConfDir->absolutePath() != QDir(portableConf).absolutePath()) {
+        // first run from a per-user folder: carry over what an older (read-only) install folder has
+        for(const QString &name : { qApp->applicationName() + ".ini", QString("savedState.ini"), QString("theme.ini") }) {
+            QString target = mConfDir->absoluteFilePath(name);
+            QString source = portableConf + "/" + name;
+            if(!QFile::exists(target) && QFile::exists(source))
+                QFile::copy(source, target);
+        }
+    }
     settingsConf = new QSettings(mConfDir->absolutePath() + "/" + qApp->applicationName() + ".ini", QSettings::IniFormat);
     stateConf = new QSettings(mConfDir->absolutePath() + "/savedState.ini", QSettings::IniFormat);
     themeConf = new QSettings(mConfDir->absolutePath() + "/theme.ini", QSettings::IniFormat);
@@ -57,9 +97,9 @@ void Settings::setupCache() {
     mThumbCacheDir = new QDir(mTmpDir->absolutePath() + "/thumbnails");
     mThumbCacheDir->mkpath(mThumbCacheDir->absolutePath());
 #else
-    mTmpDir = new QDir(QApplication::applicationDirPath() + "/cache");
+    mTmpDir = new QDir(writableDir(QApplication::applicationDirPath() + "/cache", QStandardPaths::CacheLocation, QString()));
     mTmpDir->mkpath(mTmpDir->absolutePath());
-    mThumbCacheDir = new QDir(QApplication::applicationDirPath() + "/thumbnails");
+    mThumbCacheDir = new QDir(writableDir(QApplication::applicationDirPath() + "/thumbnails", QStandardPaths::CacheLocation, "thumbnails"));
     mThumbCacheDir->mkpath(mThumbCacheDir->absolutePath());
 #endif
 }
@@ -805,6 +845,7 @@ QStringList Settings::bookmarks() {
 
 void Settings::setBookmarks(QStringList paths) {
     settings->stateConf->setValue("bookmarks", paths);
+    settings->stateConf->sync(); // write now, do not wait for a clean exit
 }
 //------------------------------------------------------------------------------
 bool Settings::placesPanel() {
@@ -955,7 +996,7 @@ void Settings::setTopBarEnabled(bool mode) {
 }
 
 bool Settings::topBarPerformance() {
-    return settings->settingsConf->value("topBarPerformance", false).toBool();
+    return settings->settingsConf->value("topBarPerformance", true).toBool();
 }
 
 void Settings::setTopBarPerformance(bool mode) {
@@ -1161,12 +1202,22 @@ void Settings::setJxlAnimation(bool mode) {
     settings->settingsConf->setValue("jxlAnimation", mode);
 }
 //------------------------------------------------------------------------------
-bool Settings::collageStaticCanvas() {
-    return settings->settingsConf->value("collageStaticCanvas", false).toBool();
+// editor layout: index of CollageLayout::Mode (0 = mosaic, 4 = freehand)
+int Settings::collageEditLayout() {
+    return qBound(0, settings->settingsConf->value("collageEditLayout", 0).toInt(), 4);
 }
 
-void Settings::setCollageStaticCanvas(bool mode) {
-    settings->settingsConf->setValue("collageStaticCanvas", mode);
+void Settings::setCollageEditLayout(int mode) {
+    settings->settingsConf->setValue("collageEditLayout", mode);
+}
+
+// collage view canvas shape: index into the view bar "Canvas" combo (0 = fill the window)
+int Settings::collageViewShape() {
+    return qBound(0, settings->settingsConf->value("collageViewShape", 0).toInt(), 4);
+}
+
+void Settings::setCollageViewShape(int shape) {
+    settings->settingsConf->setValue("collageViewShape", shape);
 }
 
 bool Settings::collageAnimate() {

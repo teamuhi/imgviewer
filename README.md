@@ -44,13 +44,13 @@ Main window & panel        |  Folder view   |  Settings window
 | Zoom out  | MouseWheel / Ctrl+Down |
 | Zoom (alt. method) | Hold right mouse button & move up / down |
 | Move the image freely (even when it fits the window) | MiddleMouse drag |
-| Snap a moved image back to the middle | MiddleMouse click (a fit mode key also re-centres it) |
+| Reset a moved / zoomed image (back to the default fit, centred) | MiddleMouse click (a fit mode key also re-centres it) |
 | Fit mode: window | 1 |
 | Fit mode: width | 2 |
 | Fit mode: 1:1 (no scaling) | 3 |
 | Switch fit modes  | Space |
 | Toggle fullscreen mode  | DoubleClick / F / F11 |
-| Exit fullscreen mode | Esc |
+| Exit fullscreen mode | Esc (never quits the app) |
 | Show EXIF panel  | I |
 | Crop image  | X |
 | Resize image  | R |
@@ -70,7 +70,7 @@ Main window & panel        |  Folder view   |  Settings window
 | Collage view | Ctrl+G |
 | Print / Export PDF | Ctrl+P |
 | Settings  | P |
-| Exit application | Esc / Ctrl+Q / Alt+X |
+| Exit application | Ctrl+Q / Alt+X |
 
 ... and more.
 
@@ -80,7 +80,7 @@ Note: you can configure every shortcut by going to __Settings > Controls__
 
 - The menu row on the left (General, View, Theme, Controls, Scripts, Advanced, About) opens the settings dialog on that page. On narrow windows it collapses into a *Settings* dropdown.
 - The percentage on the right is the current magnification of the image.
-- __Settings > View > Performance > Show CPU / RAM usage in the top bar__ (off by default) adds the CPU and memory usage of qimgv itself, updated every second. Hidden on narrow windows.
+- __Settings > View > Performance > Show CPU / RAM usage in the top bar__ (on by default) adds the CPU and memory usage of qimgv itself, updated every second. Hidden on narrow windows. In fullscreen the same readout shows in the top right corner together with the fullscreen info bar.
 - The bar can be turned off in __Settings > General > Top bar__ (it is always hidden in fullscreen).
 
 ### Collage
@@ -103,13 +103,17 @@ Only a few shortcuts work while the collage is open (open, settings, fullscreen,
 | Play / pause the selected animated tile (none selected: all) | Space |
 | Remove tile | Delete |
 | Switch to editor / back to view | E |
-| Show the toolbar | Move the cursor to the top edge |
+| Show the toolbar (it slides in, and slides out again after a moment) | Move the cursor to the top edge |
+| Frame shape (Window, 16:9, 4:5, mobile 9:16, square) | "Canvas" dropdown in the toolbar (not used by Freehand) |
+| Crop in Freehand (drag pans the picture, wheel zooms it, handles off) | "Crop" toggle in the toolbar |
 
 | Action (collage editor) | Shortcut |
 | ------------- | ------------- |
 | Move / resize a frame | Drag / drag the handles (Shift keeps proportions, Ctrl disables snapping) |
-| Pan the picture inside a frame | Alt+drag or "Crop mode" |
-| Lock frames to the automatic layout (no free placement) | "Static canvas" checkbox in the editor toolbar (drag pans the picture, Ctrl+drag swaps frames) |
+| Show the toolbar (it slides in, and slides out again after a moment) | Move the cursor to the top edge |
+| Pick how frames are arranged (Mosaic is the default) | "Layout" dropdown: Mosaic / Grid / Row / Column arrange automatically (drag pans the picture, Ctrl+drag swaps frames), Freehand = place frames yourself |
+| Pan the picture inside a frame (Freehand) | "Crop" toggle in the toolbar (drag pans, wheel zooms, handles off) or Alt+drag |
+| Canvas size, incl. portrait / mobile presets (3:4, 9:16, 20:9, iPhone) | "Canvas" dropdown or W / H in the toolbar |
 | Zoom the picture inside a frame | Shift+MouseWheel |
 | Nudge selected frames | Arrow keys (Shift = 10 px) |
 | Select all / bring to front / send to back | Ctrl+A / PageUp / PageDown |
@@ -164,6 +168,10 @@ qimgv should also obey the global scale factor set in KDE's systemsettings.
 qimgv supports nicer scaling filters when compiled with `opencv` support (ON by default, but might vary depending on your linux distribution). Filter options are available in __Settings > Scaling__. `Bicubic` or `bilinear+sharpen` is recommended.
 
 # Additional image formats
+
+Built-in Qt plugins cover JPEG, PNG, GIF, BMP, ICO, SVG, WebP, TIFF, TGA, WBMP and ICNS (WebP / TIFF / TGA / WBMP / ICNS come from `qt6-imageformats`, which `deploy.ps1` copies next to the exe).
+
+The format is detected from the file **content**, not the extension, so a WebP renamed to `.png` still opens.
 
 qimgv can open some extra formats via third-party image plugins. All of them are included with windows package.
 

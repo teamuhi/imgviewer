@@ -14,6 +14,8 @@ public:
     bool isAutoFit() const;
     void setViewMode(bool mode);
     bool isViewMode() const;
+    // crop on: the plain wheel zooms the picture under the cursor instead of the whole view
+    void setCropMode(bool on);
 
 public slots:
     void fitCanvas();
@@ -23,7 +25,6 @@ signals:
     void filesDropped(const QStringList &paths);
     void modeToggleRequested(); // "E" key
     void animationToggleRequested(); // Space with no animated tile selected
-    void viewMoved();                // scrolled or zoomed (the floating panel refreshes its backdrop)
 
 protected:
     void scrollContentsBy(int dx, int dy) override;
@@ -43,6 +44,7 @@ private:
     bool mAutoFit = true;
     bool mPanning = false;
     bool mViewMode = false;
+    bool mCropMode = false;
     bool mGrowing = false; // guards ensurePanRoom() against the scroll changes its own resize causes
 
     void viewScaleChanged();

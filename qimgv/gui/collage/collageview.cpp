@@ -42,6 +42,10 @@ bool CollageView::isViewMode() const {
     return mViewMode;
 }
 
+void CollageView::setCropMode(bool on) {
+    mCropMode = on;
+}
+
 // view mode: dragging empty space pans the (zoomed) collage, edit mode: rubber band selection
 void CollageView::applyDragMode() {
     setDragMode(mViewMode ? QGraphicsView::ScrollHandDrag : QGraphicsView::RubberBandDrag);
@@ -74,7 +78,6 @@ CollageItem *CollageView::itemUnderCursor(const QPoint &pos) const {
 
 void CollageView::viewScaleChanged() {
     mScene->setViewScale(transform().m11());
-    emit viewMoved();
 }
 
 // Freehand: keep the scene bigger than what is on screen so the canvas can be dragged anywhere, at any zoom
@@ -95,7 +98,6 @@ void CollageView::ensurePanRoom() {
 void CollageView::scrollContentsBy(int dx, int dy) {
     QGraphicsView::scrollContentsBy(dx, dy);
     ensurePanRoom();
-    emit viewMoved();
 }
 
 void CollageView::fitCanvas() {
@@ -154,11 +156,11 @@ void CollageView::wheelEvent(QWheelEvent *event) {
         return;
     }
     qreal steps = delta / 120.0;
-    // Shift + wheel: zoom the picture inside the selected frame (crop)
-    if(event->modifiers().testFlag(Qt::ShiftModifier)) {
-        // view: the tile under the cursor, edit: the single selected frame
+    // Shift + wheel (or plain wheel while Crop is on): zoom the picture inside the frame under the cursor
+    if(event->modifiers().testFlag(Qt::ShiftModifier) || mCropMode) {
+        // view / crop: the frame under the cursor, edit: the single selected frame
         CollageItem *item = nullptr;
-        if(mViewMode) {
+        if(mViewMode || mCropMode) {
 #if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
             item = itemUnderCursor(event->position().toPoint());
 #else

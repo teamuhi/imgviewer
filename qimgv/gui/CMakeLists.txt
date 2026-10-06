@@ -55,6 +55,7 @@ target_sources(qimgv PRIVATE
     overlays/floatingmessageproxy.cpp
     overlays/fullscreeninfooverlay.cpp
     overlays/fullscreeninfooverlayproxy.cpp
+    overlays/fullscreenstatsoverlay.cpp
     overlays/imageinfooverlay.cpp
     overlays/imageinfooverlayproxy.cpp
     overlays/mapoverlay.cpp

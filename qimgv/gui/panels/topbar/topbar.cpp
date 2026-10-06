@@ -14,13 +14,6 @@ const int HIDE_PERF_WIDTH = 640;
 const int MIN_NAME_WIDTH = 160;
 const int SEPARATOR_HEIGHT = 18;
 const int MENU_ICON_SIZE = 16;
-
-QString memoryText(qint64 bytes) {
-    double megabytes = bytes / (1024.0 * 1024.0);
-    if(megabytes >= 1024.0)
-        return QString::number(megabytes / 1024.0, 'f', 1) + " GB";
-    return QString::number(qRound(megabytes)) + " MB";
-}
 }
 
 TopBar::TopBar(QWidget *parent) : QWidget(parent) {
@@ -234,7 +227,7 @@ void TopBar::updatePerformance() {
         return;
     }
     QString cpu = stats.hasCpu() ? QString::number(qRound(stats.cpuPercent())) + "%" : QString::fromUtf8("\xE2\x80\x93");
-    perfLabel.setText(tr("CPU %1   RAM %2").arg(cpu, memoryText(stats.memoryBytes())));
+    perfLabel.setText(tr("CPU %1   RAM %2").arg(cpu, ProcessStats::memoryText(stats.memoryBytes())));
     if(!perfHasSample) {
         perfHasSample = true;
         updateLayoutState(); // the label becomes visible; its width is fixed, so later ticks need no relayout

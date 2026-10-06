@@ -52,7 +52,7 @@ void Actions::init() {
     mActions.insert("jumpToFirst", QVersionNumber(0,6,2));
     mActions.insert("jumpToLast", QVersionNumber(0,6,2));
     mActions.insert("openSettings", QVersionNumber(0,6,2));
-    mActions.insert("closeFullScreenOrExit", QVersionNumber(0,6,2));
+    mActions.insert("closeFullScreen", QVersionNumber(0,6,2));
     mActions.insert("exit", QVersionNumber(0,6,2));
     mActions.insert("flipH", QVersionNumber(0,6,3));
     mActions.insert("flipV", QVersionNumber(0,6,3));
