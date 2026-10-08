@@ -1473,11 +1473,157 @@ CollageWidget QSlider::sub-page:horizontal:disabled {
     border-radius: 6px;
 }
 
-[accessibleName="CollageOverlayBar"] QLabel {
+[accessibleName="CollageOverlayBar"] QLabel,
+[accessibleName="CollageOverlayBar"] QCheckBox,
+[accessibleName="CollageToolbar"] QCheckBox {
     color: %overlay_text%;
 }
 
 CollageWidget [accessibleName="CollageEmptyHint"] {
     background-color: transparent;
     font-size: %font_large%;
+}
+
+/* "Border" tool button of the bars + its popup card */
+CollageWidget QToolButton[accessibleName="CollageBarToolButton"] {
+    background-color: %button%;
+    color: %text_hc%;
+    border: 1px solid %widget_border%;
+    border-radius: 3px;
+    padding: 3px 10px;
+}
+
+CollageWidget QToolButton[accessibleName="CollageBarToolButton"]:hover {
+    background-color: %button_hover%;
+}
+
+CollageWidget QToolButton[accessibleName="CollageBarToolButton"]::menu-indicator {
+    image: none;
+    width: 0px;
+}
+
+QMenu[accessibleName="CollagePopup"] {
+    background-color: %widget%;
+    border: 1px solid %widget_border%;
+    padding: 2px;
+}
+
+[accessibleName="CollagePopupCard"] {
+    background-color: transparent;
+}
+
+/* scrub fields of the collage: the number can be dragged sideways */
+CollageWidget QSpinBox[accessibleName="ScrubSpinBox"] {
+    padding-left: 6px;
+}
+
+/*----------------------------------------------------------------------------*/
+/* Slideshow mode: control bar (bottom centre) + caption (bottom left) */
+
+SlideshowBar {
+    background-color: %overlay_rgba%;
+    border: 1px solid %widget_border%;
+    border-radius: 8px;
+}
+
+SlideshowBar QLabel,
+SlideshowBar QCheckBox {
+    background-color: transparent;
+    color: %overlay_text%;
+}
+
+SlideshowBar QCheckBox {
+    spacing: 6px;
+}
+
+SlideshowBar QCheckBox::indicator {
+    width: 14px;
+    height: 14px;
+    background-color: %button%;
+    border: 1px solid %widget_border%;
+    border-radius: 3px;
+}
+
+SlideshowBar QCheckBox::indicator:hover {
+    border-color: %accent%;
+}
+
+SlideshowBar QCheckBox::indicator:checked {
+    background-color: %accent%;
+    border-color: %accent%;
+    image: url(%check_icon%);
+}
+
+SlideshowBar QPushButton {
+    background-color: %button%;
+    color: %text_hc%;
+    border: 1px solid %widget_border%;
+    border-radius: 4px;
+    padding: 3px 12px;
+}
+
+SlideshowBar QPushButton[accessibleName="SlideshowBarButton"] {
+    padding: 0px;
+}
+
+SlideshowBar QPushButton:hover {
+    background-color: %button_hover%;
+}
+
+SlideshowBar QPushButton:pressed {
+    background-color: %button_pressed%;
+}
+
+SlideshowBar QDoubleSpinBox,
+SlideshowBar QComboBox {
+    background-color: %button%;
+    color: %text_hc%;
+    border: 1px solid %widget_border%;
+    border-radius: 3px;
+    padding: 3px 6px;
+    min-height: 20px;
+    selection-background-color: %accent%;
+}
+
+SlideshowBar QDoubleSpinBox:hover,
+SlideshowBar QComboBox:hover {
+    border-color: %text_lc%;
+}
+
+SlideshowBar QComboBox::drop-down {
+    border: none;
+    width: 18px;
+}
+
+SlideshowBar QComboBox QAbstractItemView {
+    background-color: %button%;
+    color: %text_hc%;
+    border: 1px solid %widget_border%;
+    selection-background-color: %accent%;
+    outline: none;
+}
+
+SlideshowCaption {
+    background-color: %overlay_rgba%;
+    border-radius: 6px;
+}
+
+SlideshowCaption QLabel {
+    background-color: transparent;
+    color: %overlay_text%;
+}
+
+[accessibleName="SlideshowCaptionName"] {
+    font-weight: bold;
+}
+
+/*----------------------------------------------------------------------------*/
+/* Scrub fields (drag sideways to change the number): accent border while dragging */
+
+QAbstractSpinBox[scrubbing="true"] {
+    border-color: %accent%;
+}
+
+QDialog [accessibleName="SettingsNote"] {
+    color: %text_lc%;
 }

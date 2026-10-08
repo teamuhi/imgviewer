@@ -14,6 +14,9 @@
 #include "gui/collage/collagescene.h"
 #include "gui/collage/collageview.h"
 #include "gui/customwidgets/colorselectorbutton.h"
+#include "gui/customwidgets/scrubspinbox.h"
+#include "gui/customwidgets/rulers.h"
+#include <QToolButton>
 
 // Collage widget with two faces on one image list:
 //  View - tiles fill the window, minimal auto-hiding bar, drag to swap, zoom / pan tiles
@@ -21,13 +24,30 @@
 class WrapLayout;
 class QPropertyAnimation;
 
-// Floating card for the properties panel: a rounded, theme-tinted overlay painted over the collage
+// Floating card for the properties / layout panels: a rounded, theme-tinted overlay painted over the collage.
+// Optionally resizable by dragging one vertical edge.
 class CollagePanelFrame : public QWidget {
+    Q_OBJECT
 public:
     explicit CollagePanelFrame(QWidget *parent = nullptr);
+    // edge: Qt::LeftEdge (panel docked right) or Qt::RightEdge (panel docked left); 0 = fixed width
+    void setResizeEdge(Qt::Edges edge);
+
+signals:
+    void widthDragged(int width);
+    void resizeFinished(int width);
 
 protected:
     void paintEvent(QPaintEvent *event) override;
+    void resizeEvent(QResizeEvent *event) override;
+    bool eventFilter(QObject *watched, QEvent *event) override;
+
+private:
+    Qt::Edges mEdge;
+    QWidget *mGrip = nullptr; // thin strip on the resizable edge, above the content
+    bool mResizing = false;
+    int mStartGlobalX = 0, mStartWidth = 0;
+    void placeGrip();
 };
 
 class CollageWidget : public QWidget {
@@ -71,14 +91,16 @@ private slots:
 private:
     CollageScene *mScene;
     CollageView *mView;
+    RulerController *mRulers = nullptr; // rulers + guides inside the view (both modes)
+    QRect contentArea() const;          // the view without the rulers: floating bars / cards stay inside it
 
     // toolbar
     QWidget *mToolbar;
     QComboBox *mLayoutCombo, *mPresetCombo;
-    QSpinBox *mGapSpin, *mCanvasWidthSpin, *mCanvasHeightSpin;
+    ScrubSpinBox *mGapSpin, *mCanvasWidthSpin, *mCanvasHeightSpin;
     ColorSelectorButton *mBackgroundButton;
     QCheckBox *mTransparentCheck, *mAnimateCheck;
-    QPushButton *mPanelToggle, *mEditCropButton;
+    QPushButton *mPanelToggle, *mEditCropButton, *mEditLayoutPanelButton;
     WrapLayout *mToolbarLayout;
 
     // properties panel
@@ -89,7 +111,17 @@ private:
     QWidget *mPanelContent;
     QLabel *mNameLabel, *mInfoLabel, *mZoomValueLabel, *mOpacityValueLabel;
     QComboBox *mFitCombo, *mResolutionCombo;
-    QSpinBox *mXSpin, *mYSpin, *mWidthSpin, *mHeightSpin, *mRadiusSpin;
+    ScrubSpinBox *mXSpin, *mYSpin, *mWidthSpin, *mHeightSpin, *mRadiusSpin;
+    // view: size of the selected tile (best effort in the automatic layouts, exact in Freehand)
+    ScrubSpinBox *mViewWSpin, *mViewHSpin;
+    QList<QWidget*> mViewSizeWidgets;
+    QComboBox *mBorderModeCombo = nullptr;
+    QList<QWidget*> mBorderModeWidgets; // only while an automatic layout is on screen
+    // per-tile outline (overrides the collage default)
+    ScrubSpinBox *mTileBorderSpin;
+    ColorSelectorButton *mTileBorderColor;
+    QComboBox *mTileBorderStyle;
+    int mPanelWidth = 320;
     QCheckBox *mKeepAspectCheck;
     QSlider *mZoomSlider, *mOpacitySlider;
     QPushButton *mCropModeButton;
@@ -102,11 +134,35 @@ private:
     QWidget *mOverlayBar;
     WrapLayout *mOverlayLayout;
     QComboBox *mViewLayoutCombo, *mViewAspectCombo, *mViewShapeCombo;
-    QSpinBox *mViewGapSpin;
+    ScrubSpinBox *mViewGapSpin;
     QCheckBox *mViewAnimateCheck;
-    QSlider *mViewSizeSlider;
-    QLabel *mViewSizeValueLabel, *mEmptyHint;
-    QPushButton *mViewPanelButton, *mViewCropButton;
+    QLabel *mEmptyHint;
+    QPushButton *mViewPanelButton, *mViewCropButton, *mViewLayoutPanelButton;
+    // view canvas: "Custom..." width / height
+    QWidget *mViewCustomBox = nullptr;
+    ScrubSpinBox *mViewCanvasWSpin, *mViewCanvasHSpin;
+    // view background: theme (colour + pattern) or the canvas colour
+    QCheckBox *mViewThemeBgCheck;
+    ColorSelectorButton *mViewBgButton;
+    // "Border" popups of the view bar and the editor toolbar (same settings)
+    struct BorderPopup {
+        ScrubSpinBox *width = nullptr;
+        ColorSelectorButton *color = nullptr;
+        QCheckBox *themeColor = nullptr;
+        QComboBox *style = nullptr;
+    };
+    QList<BorderPopup> mBorderPopups;
+
+    // layout options panel (Grid / Row / Column), floats at the left edge
+    CollagePanelFrame *mLayoutPanel = nullptr;
+    QLabel *mLayoutPanelTitle;
+    ScrubSpinBox *mLayColumns, *mLayRows, *mLayCellW, *mLayCellH, *mLayLines, *mLayLineSize;
+    ScrubSpinBox *mLayRotation, *mLayGap, *mLaySides, *mLayStarDepth;
+    QCheckBox *mLayHoneycomb, *mLayStar;
+    QComboBox *mLayShape = nullptr, *mLayBorderMode = nullptr;
+    QLabel *mLayLinesLabel, *mLayLineSizeLabel;
+    QList<QWidget*> mLayGridRows, mLayLineRows, mLayPolygonRows;
+    bool mLayoutPanelWanted = false;
     QTimer *mOverlayTimer;
     QList<QPair<QPushButton*, QString>> mIconButtons; // re-tinted when the theme changes
     QList<QWidget*> mEditOnlyWidgets, mViewOnlyWidgets; // panel rows that only make sense in one mode
@@ -163,5 +219,25 @@ private:
     void updateStatus();
     void setPanelVisible(bool visible);
     void updateHelpVisibility();
+    // layout options panel
+    void buildLayoutPanel();
+    void syncLayoutPanel();
+    void applyLayoutPanel();
+    void setLayoutPanelVisible(bool visible);
+    bool layoutPanelAllowed() const;
+    // tile outline default (view bar / editor toolbar popups)
+    QToolButton *makeBorderButton(QWidget *parent);
+    void syncBorderPopups();
+    void applyDefaultBorder(int width, const QColor &color, int style);
+    // view canvas (pixel size shared with the editor canvas, or the whole window)
+    void restoreViewCanvas();
+    void onViewCanvasChanged(int index);
+    void applyViewCanvas(int width, int height);
+    void syncViewCanvasCombo();
+    void onViewBackgroundChanged();
+    void syncBackgroundControls();
+    // W / H of the selected tile in the view
+    void applyViewSize(int source);
+    void syncBorderModeCombos(int mode);
     static QString helpHtml(bool edit);
 };

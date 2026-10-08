@@ -384,6 +384,21 @@ bool ImageViewerV2::isDisplaying() const {
     return (pixmap != nullptr);
 }
 
+bool ImageViewerV2::imageToViewport(QTransform &out) const {
+    if(!pixmap || pixmap->isNull() || pixmap->width() <= 0 || pixmap->height() <= 0)
+        return false;
+    // the item keeps tracking the zoom even while the pre-scaled copy is on screen
+    QRectF r = viewportTransform().mapRect(pixmapItem.sceneBoundingRect());
+    if(r.width() <= 0 || r.height() <= 0)
+        return false;
+    out = QTransform(r.width() / pixmap->width(), 0, 0, r.height() / pixmap->height(), r.left(), r.top());
+    return true;
+}
+
+void ImageViewerV2::setRulerMargins(int left, int top) {
+    setViewportMargins(left, top, 0, 0);
+}
+
 void ImageViewerV2::scrollUp() {
     scroll(0, -DEFAULT_SCROLL_DISTANCE, true);
 }

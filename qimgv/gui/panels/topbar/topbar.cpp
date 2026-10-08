@@ -48,14 +48,16 @@ TopBar::TopBar(QWidget *parent) : QWidget(parent) {
     backButton       = new ActionButton("documentView", ":/res/icons/common/buttons/panel/back20.png",       BUTTON_SIZE, this);
     openButton       = new ActionButton("open",         ":/res/icons/common/buttons/panel/open20.png",       BUTTON_SIZE, this);
     collageButton    = new ActionButton("openCollage",  ":/res/icons/common/buttons/panel/collage20.png",    BUTTON_SIZE, this);
+    slideshowButton  = new ActionButton("toggleSlideshow", ":/res/icons/common/buttons/panel/slideshow20.png", BUTTON_SIZE, this);
     folderViewButton = new ActionButton("folderView",   ":/res/icons/common/buttons/panel/folderview20.png", BUTTON_SIZE, this);
     settingsButton   = new ActionButton("openSettings", ":/res/icons/common/buttons/panel/settings20.png",   BUTTON_SIZE, this);
     backButton->setToolTip(tr("Back to the image viewer"));
     openButton->setToolTip(tr("Open"));
     collageButton->setToolTip(tr("Collage"));
+    slideshowButton->setToolTip(tr("Slideshow"));
     folderViewButton->setToolTip(tr("Folder view"));
     settingsButton->setToolTip(tr("Settings"));
-    for(ActionButton *button : {backButton, openButton, collageButton, folderViewButton, settingsButton}) {
+    for(ActionButton *button : {backButton, openButton, collageButton, slideshowButton, folderViewButton, settingsButton}) {
         button->setAccessibleName("TopBarButton");
         button->setTriggerMode(TriggerMode::PressTrigger);
         button->setShortcutInToolTip(true);
@@ -78,6 +80,7 @@ TopBar::TopBar(QWidget *parent) : QWidget(parent) {
     layout.addSpacing(6);
     layout.addWidget(openButton);
     layout.addWidget(collageButton);
+    layout.addWidget(slideshowButton);
     layout.addWidget(folderViewButton);
     layout.addWidget(settingsButton);
     setLayout(&layout);
@@ -189,6 +192,11 @@ void TopBar::setBackVisible(bool visible) {
     updateLayoutState();
 }
 
+// the slideshow runs over the images of the open folder: not from the collage
+void TopBar::setSlideshowAllowed(bool allowed) {
+    slideshowButton->setEnabled(allowed);
+}
+
 void TopBar::setBackToCollage(bool toCollage) {
     backButton->setAction(toCollage ? "openCollage" : "documentView");
     backButton->setToolTip(toCollage ? tr("Back to the collage") : tr("Back to the image viewer"));
@@ -244,7 +252,7 @@ void TopBar::updateLayoutState() {
     zoomLabel.setVisible(width() >= HIDE_INDEX_WIDTH && zoomAllowed && zoomScale > 0.0);
     perfLabel.setVisible(perfEnabled && perfHasSample && width() >= HIDE_PERF_WIDTH);
 
-    int buttonsWidth = 4 * BUTTON_SIZE + spacing * 4 + 6;
+    int buttonsWidth = 5 * BUTTON_SIZE + spacing * 5 + 6;
     int used = layout.contentsMargins().left() + layout.contentsMargins().right() + buttonsWidth;
     if(!backButton->isHidden())
         used += BUTTON_SIZE + spacing;

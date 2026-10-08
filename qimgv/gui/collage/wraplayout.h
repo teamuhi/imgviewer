@@ -22,9 +22,13 @@ public:
     void setGeometry(const QRect &rect) override;
     QSize sizeHint() const override;
     QSize minimumSize() const override;
+    // pinned to the right end of the first line, vertically centred; the other items wrap in the
+    // width left of it. The widget must already be in the layout (addWidget).
+    void setTrailingWidget(QWidget *widget);
 
 private:
     QList<QLayoutItem*> mItems;
+    QLayoutItem *mTrailing = nullptr;
     int mHSpace, mVSpace;
 
     int doLayout(const QRect &rect, bool testOnly) const;

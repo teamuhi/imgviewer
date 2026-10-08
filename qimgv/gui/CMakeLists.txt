@@ -8,6 +8,8 @@ target_sources(qimgv PRIVATE
     collage/collageitem.cpp
     collage/collagelayout.cpp
     collage/collagescene.cpp
+    collage/collageseparator.cpp
+    collage/collageshape.cpp
     collage/collageview.cpp
     collage/collagewidget.cpp
     collage/wraplayout.cpp
@@ -37,6 +39,8 @@ target_sources(qimgv PRIVATE
     customwidgets/colorareawidget.cpp
     customwidgets/entryinfoitem.cpp
     customwidgets/ssidebar.cpp
+    customwidgets/scrubspinbox.cpp
+    customwidgets/rulers.cpp
 
     dialogs/colorpickerdialog.cpp
     dialogs/filereplacedialog.cpp
@@ -56,6 +60,9 @@ target_sources(qimgv PRIVATE
     overlays/fullscreeninfooverlay.cpp
     overlays/fullscreeninfooverlayproxy.cpp
     overlays/fullscreenstatsoverlay.cpp
+    overlays/slideshowbar.cpp
+    overlays/slideshowcaption.cpp
+    overlays/slidetransition.cpp
     overlays/imageinfooverlay.cpp
     overlays/imageinfooverlayproxy.cpp
     overlays/mapoverlay.cpp

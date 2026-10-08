@@ -19,6 +19,8 @@ public:
     void hideFloatingPanel(bool animated);
     void setPanelEnabled(bool mode);
     bool panelEnabled();
+    // slideshow mode: keeps the thumbnail panel away without touching the setting
+    void setPanelSuppressed(bool mode);
     void setupMainPanel();
     void setInteractionEnabled(bool mode);
     void allowPanelInit();
@@ -41,5 +43,5 @@ private:
     std::shared_ptr<ViewerWidget> mViewWidget;
     std::shared_ptr<InfoBarProxy> mInfoBar;
     std::shared_ptr<MainPanel> mainPanel;
-    bool avoidPanelFlag, mPanelEnabled, mPanelFullscreenOnly, mIsFullscreen, mPanelPinned, mInteractionEnabled, mAllowPanelInit;
+    bool avoidPanelFlag, mPanelEnabled, mPanelFullscreenOnly, mIsFullscreen, mPanelPinned, mInteractionEnabled, mAllowPanelInit, mPanelSuppressed = false;
 };

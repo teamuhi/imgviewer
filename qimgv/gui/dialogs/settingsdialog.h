@@ -12,6 +12,12 @@
 #include <QApplication>
 #include <QDebug>
 #include <QMenu>
+#include <QFontComboBox>
+#include <QCheckBox>
+#include <QLabel>
+#include <QComboBox>
+#include <QIntValidator>
+#include <QSpinBox>
 #include "gui/customwidgets/colorselectorbutton.h"
 #include "gui/dialogs/shortcutcreatordialog.h"
 #include "gui/dialogs/scripteditordialog.h"
@@ -48,7 +54,21 @@ private:
     void addScriptToList(const QString &name);
 
     void setupSidebar();
+    void setupExtraControls();
     void removeShortcutAt(int row);
+    // controls built in code (not in the .ui)
+    QFontComboBox *fontComboBox = nullptr;
+    QCheckBox *fontMonospaceCheckBox = nullptr;
+    QLabel *fontPreviewLabel = nullptr;
+    QString loadedFontFamily; // what the combo showed on load: only a real change re-applies the font
+    QComboBox *slideTransitionComboBox = nullptr;
+    QCheckBox *slideShowNameCheckBox = nullptr, *slideShowDateCheckBox = nullptr;
+    // rulers & guides (View page)
+    QCheckBox *rulersCheckBox = nullptr, *rulerImageDpiCheckBox = nullptr;
+    QComboBox *rulerUnitComboBox = nullptr, *rulerMixedComboBox = nullptr;
+    QSpinBox *rulerDpiSpinBox = nullptr;
+    QCheckBox *rulerSnapCheckBox = nullptr;
+    QComboBox *rulerSnapComboBox = nullptr;
     void adjustSizeToContents();
     QMap<QString, QString> langs; // <"en_US", "English">
     QButtonGroup fitModeGrp, folderEndGrp, zoomIndGrp;

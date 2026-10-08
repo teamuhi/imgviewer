@@ -81,12 +81,13 @@ void ActionManager::initDefaults() {
     actionManager->defaults.insert("I", "toggleImageInfo");
     actionManager->defaults.insert(InputMap::keyNameCtrl() + "+`", "toggleShuffle");
     actionManager->defaults.insert(InputMap::keyNameCtrl() + "+D", "showInDirectory");
-    actionManager->defaults.insert("`", "toggleSlideshow");
+    // toggleSlideshow has no default key: the slideshow is started from the top bar button
     actionManager->defaults.insert(InputMap::keyNameCtrl() + "+Z", "discardEdits");
     actionManager->defaults.insert(InputMap::keyNameShift() + "+Right", "nextDirectory");
     actionManager->defaults.insert(InputMap::keyNameShift() + "+Left", "prevDirectory");
     actionManager->defaults.insert(InputMap::keyNameShift() + "+F", "toggleFullscreenInfoBar");
     actionManager->defaults.insert(InputMap::keyNameCtrl() + "+V", "pasteFile");
+    actionManager->defaults.insert(InputMap::keyNameCtrl() + "+" + InputMap::keyNameShift() + "+R", "toggleRulers");
 
 #ifdef __APPLE__
     actionManager->defaults.insert(InputMap::keyNameAlt() + "+Up", "zoomIn");
@@ -200,6 +201,13 @@ void ActionManager::adjustFromVersion(QVersionNumber lastVer) {
             shortcuts.insert(InputMap::keyNameCtrl() + "+WheelDown", "nextImage");
         }
     }
+    // the ` slideshow key was dropped (slideshow mode has a top bar button). only the stock binding goes
+    if(lastVer < QVersionNumber(1,0,5)) {
+        if(shortcuts.value("`") == "toggleSlideshow") {
+            qDebug() << "[actionManager]: removing the stock ` -> toggleSlideshow binding";
+            shortcuts.remove("`");
+        }
+    }
     // add new default actions
     QMapIterator<QString, QString> i(defaults);
     while(i.hasNext()) {
@@ -235,15 +243,27 @@ const QList<QString> ActionManager::shortcutsForAction(QString action) {
 }
 
 //------------------------------------------------------------------------------
-void ActionManager::setRestricted(bool mode) {
-    mRestricted = mode;
+void ActionManager::setRestriction(Restriction mode) {
+    mRestriction = mode;
+}
+
+ActionManager::Restriction ActionManager::restriction() const {
+    return mRestriction;
 }
 //------------------------------------------------------------------------------
 bool ActionManager::invokeAction(const QString &actionName) {
-    if(mRestricted) {
+    if(mRestriction == Restriction::Collage) {
         static const QStringList allowed = {
             "open", "openCollage", "openSettings", "folderView", "documentView",
-            "toggleFolderView", "toggleFullscreen", "closeFullScreen"
+            "toggleFolderView", "toggleFullscreen", "closeFullScreen", "toggleRulers"
+        };
+        if(!allowed.contains(actionName))
+            return false;
+    } else if(mRestriction == Restriction::Slideshow) {
+        // nothing that edits, moves or deletes files while the show runs
+        static const QStringList allowed = {
+            "nextImage", "prevImage", "toggleFullscreen", "closeFullScreen", "toggleSlideshow",
+            "openSettings", "toggleMute", "volumeUp", "volumeDown", "toggleShuffle"
         };
         if(!allowed.contains(actionName))
             return false;

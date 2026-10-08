@@ -24,36 +24,23 @@
 #include <QIcon>
 #include <QPropertyAnimation>
 #include <QEasingCurve>
+#include <QToolButton>
+#include <QMenu>
+#include <QWidgetAction>
+#include <QScrollArea>
 #include "settings.h"
 #include "utils/imagelib.h"
+#include "gui/collage/collagepresets.h"
 
 namespace {
-
-struct CanvasPreset {
-    const char *name;
-    int width, height;
-};
-
-const CanvasPreset PRESETS[] = {
-    { QT_TR_NOOP("Full HD  1920 x 1080"),         1920, 1080 },
-    { QT_TR_NOOP("4K UHD  3840 x 2160"),          3840, 2160 },
-    { QT_TR_NOOP("Square  1080 x 1080"),          1080, 1080 },
-    { QT_TR_NOOP("Portrait 4:5  1080 x 1350"),    1080, 1350 },
-    { QT_TR_NOOP("Portrait 3:4  1080 x 1440"),    1080, 1440 },
-    { QT_TR_NOOP("Story 9:16  1080 x 1920"),      1080, 1920 },
-    { QT_TR_NOOP("Mobile 20:9  1080 x 2400"),     1080, 2400 },
-    { QT_TR_NOOP("iPhone  1179 x 2556"),          1179, 2556 },
-    { QT_TR_NOOP("A4 portrait  2480 x 3508"),     2480, 3508 },
-    { QT_TR_NOOP("A4 landscape  3508 x 2480"),    3508, 2480 },
-};
-const int PRESET_COUNT = sizeof(PRESETS) / sizeof(PRESETS[0]);
 
 // aspect ratio choices for view tiles (0 = keep the image aspect)
 const qreal VIEW_ASPECTS[] = { 0.0, 1.0, 4.0 / 3.0, 3.0 / 2.0, 16.0 / 9.0, 9.0 / 16.0, 2.0 / 3.0, 3.0 / 4.0 };
 const int VIEW_ASPECT_COUNT = sizeof(VIEW_ASPECTS) / sizeof(VIEW_ASPECTS[0]);
-// canvas shapes of the collage view (width / height, 0 = fill the window); order matches the "Canvas" combo
-const qreal VIEW_SHAPES[] = { 0.0, 16.0 / 9.0, 4.0 / 5.0, 9.0 / 16.0, 1.0 };
-const int VIEW_SHAPE_COUNT = sizeof(VIEW_SHAPES) / sizeof(VIEW_SHAPES[0]);
+// view "Canvas" combo: 0 = the whole window, 1..N = COLLAGE_PRESETS, N + 1 = custom size
+const int CANVAS_CUSTOM = COLLAGE_PRESET_COUNT + 1;
+// export buffers above this are refused by the scene (ARGB32)
+const qint64 MAX_CANVAS_PIXELS = 150LL * 1000 * 1000;
 // bar slide animation
 const int SLIDE_IN_MS = 180;
 const int SLIDE_OUT_MS = 150;
@@ -61,6 +48,10 @@ const int SLIDE_OUT_MS = 150;
 const int OVERLAY_TRIGGER = 70;
 
 const int PANEL_WIDTH = 320;
+const int MIN_PANEL_WIDTH = 260;
+const int MAX_PANEL_WIDTH = 480;
+const int LAYOUT_PANEL_WIDTH = 290;
+const int GRIP_WIDTH = 6;
 // panel card alpha: nearly solid so the text stays readable over any tile, no blur
 const int PANEL_OPACITY = 242;
 // gap between the floating panel and the edges of the view
@@ -96,6 +87,22 @@ QIcon themedIcon(const QString &iconName) {
     return QIcon(result);
 }
 
+int presetIndexFor(int width, int height) {
+    for(int i = 0; i < COLLAGE_PRESET_COUNT; i++) {
+        if(COLLAGE_PRESETS[i].width == width && COLLAGE_PRESETS[i].height == height)
+            return i;
+    }
+    return -1;
+}
+
+const char *BORDER_STYLE_NAMES[] = {
+    QT_TRANSLATE_NOOP("CollageWidget", "Solid"),
+    QT_TRANSLATE_NOOP("CollageWidget", "Dashed"),
+    QT_TRANSLATE_NOOP("CollageWidget", "Dotted"),
+    QT_TRANSLATE_NOOP("CollageWidget", "Dash-dot"),
+    QT_TRANSLATE_NOOP("CollageWidget", "Double")
+};
+
 QString megabytes(qint64 bytes) {
     return QString::number(bytes / (1024.0 * 1024.0), 'f', bytes < 10LL * 1024 * 1024 ? 1 : 0) + " MB";
 }
@@ -104,6 +111,67 @@ QString megabytes(qint64 bytes) {
 
 CollagePanelFrame::CollagePanelFrame(QWidget *parent) : QWidget(parent) {
     setAccessibleName("CollagePanelContainer");
+}
+
+void CollagePanelFrame::setResizeEdge(Qt::Edges edge) {
+    mEdge = edge;
+    if(!mEdge) {
+        delete mGrip;
+        mGrip = nullptr;
+        return;
+    }
+    if(!mGrip) {
+        mGrip = new QWidget(this);
+        mGrip->setCursor(Qt::SizeHorCursor);
+        mGrip->setToolTip(tr("Drag to resize the panel"));
+        mGrip->installEventFilter(this);
+    }
+    placeGrip();
+}
+
+void CollagePanelFrame::placeGrip() {
+    if(!mGrip)
+        return;
+    int x = (mEdge & Qt::LeftEdge) ? 0 : width() - GRIP_WIDTH;
+    mGrip->setGeometry(x, 8, GRIP_WIDTH, qMax(0, height() - 16));
+    mGrip->raise();
+}
+
+void CollagePanelFrame::resizeEvent(QResizeEvent *event) {
+    QWidget::resizeEvent(event);
+    placeGrip();
+}
+
+bool CollagePanelFrame::eventFilter(QObject *watched, QEvent *event) {
+    if(watched != mGrip)
+        return QWidget::eventFilter(watched, event);
+    switch(event->type()) {
+    case QEvent::MouseButtonPress: {
+        auto *e = static_cast<QMouseEvent*>(event);
+        if(e->button() != Qt::LeftButton)
+            return false;
+        mResizing = true;
+        mStartGlobalX = QCursor::pos().x();
+        mStartWidth = width();
+        return true;
+    }
+    case QEvent::MouseMove:
+        if(mResizing) {
+            int dx = QCursor::pos().x() - mStartGlobalX;
+            emit widthDragged((mEdge & Qt::LeftEdge) ? mStartWidth - dx : mStartWidth + dx);
+            return true;
+        }
+        return false;
+    case QEvent::MouseButtonRelease:
+        if(mResizing) {
+            mResizing = false;
+            emit resizeFinished(width());
+            return true;
+        }
+        return false;
+    default:
+        return false;
+    }
 }
 
 void CollagePanelFrame::paintEvent(QPaintEvent *) {
@@ -131,9 +199,11 @@ CollageWidget::CollageWidget(QWidget *parent) : QWidget(parent) {
     mStatusLabel = new QLabel(this);
     mStatusLabel->setAccessibleName("CollageStatus");
 
+    mPanelWidth = settings->collagePanelWidth();
     buildToolbar();
     buildPanel();
     buildOverlay();
+    buildLayoutPanel();
     connect(settings, &Settings::settingsChanged, this, &CollageWidget::updateButtonIcons);
     connect(mView, &CollageView::animationToggleRequested, this, [this]() { setAnimate(!mScene->animationsEnabled()); });
     setAnimate(settings->collageAnimate());
@@ -167,19 +237,34 @@ CollageWidget::CollageWidget(QWidget *parent) : QWidget(parent) {
     });
     mView->viewport()->installEventFilter(this);
 
-    connect(settings, &Settings::settingsChanged, this, [this]() { mPanelContainer->update(); });
+    {
+        RulerHost host;
+        host.view = mView;
+        CollageView *view = mView;
+        host.docToViewport = [view](QTransform &t) { return view->canvasToViewport(t); };
+        host.setMargins = [view](int left, int top) { view->setRulerMargins(left, top); };
+        host.docSize = [view]() { return view->canvasRectSize(); };
+        mRulers = new RulerController(host, "collage", this);
+        connect(mRulers, &RulerController::marginChanged, this, &CollageWidget::layoutOverlays);
+    }
 
-    mScene->setCanvasSize(QSize(PRESETS[0].width, PRESETS[0].height));
+    connect(settings, &Settings::settingsChanged, this, [this]() {
+        mPanelContainer->update();
+        mLayoutPanel->update();
+        syncBorderPopups(); // a theme change changes the "theme colour" outline
+        mScene->update();
+        layoutOverlays(); // the font may have changed: bars re-measure their height
+    });
+
+    mScene->setCanvasSize(QSize(COLLAGE_PRESETS[0].width, COLLAGE_PRESETS[0].height));
     {
         QSignalBlocker blockLayout(mLayoutCombo);
         mLayoutCombo->setCurrentIndex(settings->collageEditLayout());
     }
     applyEditLayout();
-    {
-        QSignalBlocker blockShape(mViewShapeCombo);
-        mViewShapeCombo->setCurrentIndex(settings->collageViewShape());
-    }
-    mScene->setViewShape(VIEW_SHAPES[mViewShapeCombo->currentIndex()]);
+    restoreViewCanvas();
+    syncBackgroundControls();
+    syncBorderPopups();
     updateStatus();
     applyModeUi(); // the scene starts in view mode
 }
@@ -239,7 +324,19 @@ void CollageWidget::updateLayoutRows() {
         widget->setEnabled(!locked);
     mViewGapSpin->setEnabled(!free); // tiles are placed by hand in Freehand, so there is no gap to apply
     mViewShapeCombo->setEnabled(!free); // Freehand always uses the whole window
+    mViewCustomBox->setVisible(!free && mViewShapeCombo->currentIndex() == CANVAS_CUSTOM);
     mGapSpin->setEnabled(!(!view && freehand));
+    for(QWidget *widget : mViewSizeWidgets)
+        widget->setVisible(view);
+    bool autoLayout = mScene->activeLayout() != CollageLayout::MODE_FREEFORM;
+    for(QWidget *widget : mBorderModeWidgets)
+        widget->setVisible(autoLayout);
+    // the layout options panel belongs to Grid / Row / Column
+    bool cells = layoutPanelAllowed();
+    mViewLayoutPanelButton->setVisible(view && cells);
+    mEditLayoutPanelButton->setVisible(!view && cells);
+    mLayoutPanel->setVisible(cells && mLayoutPanelWanted);
+    syncLayoutPanel();
     // dragging already pans the picture in the automatic layouts, so Crop only exists for Freehand
     mViewCropButton->setVisible(free);
     mEditCropButton->setVisible(!view && freehand);
@@ -254,10 +351,11 @@ void CollageWidget::buildOverlay() {
     mOverlayBar->setAccessibleName("CollageOverlayBar");
     mOverlayLayout = new WrapLayout(mOverlayBar, 8, 8, 6);
 
-    QPushButton *backButton = new QPushButton(tr("Back"), mOverlayBar);
-    backButton->setToolTip(tr("Back to the image viewer"));
-    setButtonIcon(backButton, "buttons/panel/back20");
-    connect(backButton, &QPushButton::clicked, this, &CollageWidget::exitRequested);
+    QPushButton *exitButton = new QPushButton(tr("Exit"), mOverlayBar);
+    exitButton->setToolTip(tr("Exit the collage and go back to the image viewer (Esc). It asks first; "
+                              "the collage stays in memory, Ctrl+G resumes it."));
+    setButtonIcon(exitButton, "buttons/panel/back20");
+    connect(exitButton, &QPushButton::clicked, this, &CollageWidget::exitRequested);
 
     QPushButton *addButton = new QPushButton(tr("+ Add"), mOverlayBar);
     addButton->setToolTip(tr("Add images (you can also drop files here)"));
@@ -265,7 +363,8 @@ void CollageWidget::buildOverlay() {
 
     mViewLayoutCombo = new QComboBox(mOverlayBar);
     mViewLayoutCombo->addItems({ tr("Mosaic"), tr("Grid"), tr("Row"), tr("Column"), tr("Freehand") });
-    mViewLayoutCombo->setToolTip(tr("Mosaic, Grid, Row and Column arrange the tiles for you. Freehand lets you place and resize them yourself."));
+    mViewLayoutCombo->setToolTip(tr("Mosaic, Grid, Row and Column arrange the tiles for you (drag the border between two tiles to resize them). "
+                                    "Freehand lets you place and resize them yourself."));
     connect(mViewLayoutCombo, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int index) {
         if(index < 0)
             return;
@@ -276,27 +375,81 @@ void CollageWidget::buildOverlay() {
         mView->setFocus();
     });
 
-    mViewShapeCombo = new QComboBox(mOverlayBar);
-    mViewShapeCombo->addItems({ tr("Window"), tr("Landscape 16:9"), tr("Portrait 4:5"), tr("Mobile 9:16"), tr("Square 1:1") });
-    mViewShapeCombo->setToolTip(tr("Shape of the collage frame: fill the window, or a landscape / portrait / mobile / square canvas"));
-    mViewShapeCombo->setFocusPolicy(Qt::NoFocus);
-    connect(mViewShapeCombo, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int index) {
-        if(index < 0 || index >= VIEW_SHAPE_COUNT)
-            return;
-        mScene->setViewShape(VIEW_SHAPES[index]);
-        settings->setCollageViewShape(index);
-        mView->fitCanvas();
-        mView->setFocus();
-    });
+    mViewLayoutPanelButton = new QPushButton(tr("Layout options"), mOverlayBar);
+    mViewLayoutPanelButton->setCheckable(true);
+    mViewLayoutPanelButton->setToolTip(tr("Grid / Row / Column: number of columns and rows, cell size, rotation and cell style"));
+    connect(mViewLayoutPanelButton, &QPushButton::toggled, this, &CollageWidget::setLayoutPanelVisible);
 
-    mViewGapSpin = new QSpinBox(mOverlayBar);
+    // canvas: the whole window, a pixel resolution (shared with the editor canvas) or a custom size
+    mViewShapeCombo = new QComboBox(mOverlayBar);
+    mViewShapeCombo->addItem(tr("Window (fit)"));
+    for(int i = 0; i < COLLAGE_PRESET_COUNT; i++)
+        mViewShapeCombo->addItem(tr(COLLAGE_PRESETS[i].name));
+    mViewShapeCombo->addItem(tr("Custom..."));
+    mViewShapeCombo->setToolTip(tr("Canvas of the collage: fill the window, or a frame with this pixel resolution. "
+                                   "The editor uses the same size for the export."));
+    mViewShapeCombo->setFocusPolicy(Qt::NoFocus);
+    connect(mViewShapeCombo, qOverload<int>(&QComboBox::currentIndexChanged), this, &CollageWidget::onViewCanvasChanged);
+
+    mViewCustomBox = new QWidget(mOverlayBar);
+    QHBoxLayout *customLayout = new QHBoxLayout(mViewCustomBox);
+    customLayout->setContentsMargins(0, 0, 0, 0);
+    customLayout->setSpacing(6);
+    mViewCanvasWSpin = new ScrubSpinBox(mViewCustomBox);
+    mViewCanvasHSpin = new ScrubSpinBox(mViewCustomBox);
+    for(ScrubSpinBox *spin : { mViewCanvasWSpin, mViewCanvasHSpin }) {
+        spin->setRange(16, 16384);
+        spin->setSuffix(" px");
+        spin->setToolTip(tr("Custom canvas size. Drag sideways to change it (Shift = faster, Alt = finer), or click to type."));
+        connect(spin, qOverload<int>(&QSpinBox::valueChanged), this, [this]() {
+            if(!mSyncing)
+                applyViewCanvas(mViewCanvasWSpin->value(), mViewCanvasHSpin->value());
+        });
+    }
+    mViewCanvasWSpin->setPrefix("W  ");
+    mViewCanvasHSpin->setPrefix("H  ");
+    customLayout->addWidget(mViewCanvasWSpin);
+    customLayout->addWidget(mViewCanvasHSpin);
+    mViewCustomBox->hide();
+
+    mViewGapSpin = new ScrubSpinBox(mOverlayBar);
     mViewGapSpin->setRange(0, 100);
     mViewGapSpin->setValue(mScene->viewGap());
     mViewGapSpin->setSuffix(" px");
-    mViewGapSpin->setKeyboardTracking(false);
     connect(mViewGapSpin, qOverload<int>(&QSpinBox::valueChanged), this, [this](int value) {
         mScene->setViewGap(value);
+        syncLayoutPanel();
     });
+
+    // background: theme colour + pattern, or a colour of its own (= the canvas colour of the editor)
+    mViewBgButton = new ColorSelectorButton(mOverlayBar);
+    mViewBgButton->setMinimumSize(40, 22);
+    mViewBgButton->setCursor(Qt::PointingHandCursor);
+    mViewBgButton->setDescription(tr("Collage background"));
+    mViewThemeBgCheck = new QCheckBox(tr("Theme"), mOverlayBar);
+    mViewThemeBgCheck->setToolTip(tr("Use the app background and pattern. Off: the collage gets the colour on the left "
+                                     "(the same colour as the editor canvas)."));
+    mViewThemeBgCheck->setFocusPolicy(Qt::NoFocus);
+    connect(mViewThemeBgCheck, &QCheckBox::toggled, this, &CollageWidget::onViewBackgroundChanged);
+    connect(mViewBgButton, &ColorSelectorButton::colorChanged, this, [this](const QColor &color) {
+        // a picked colour is the collage colour: shared with the editor canvas, opaque
+        QColor opaque(color.red(), color.green(), color.blue());
+        {
+            QSignalBlocker blockColor(mBackgroundButton);
+            QSignalBlocker blockTransparent(mTransparentCheck);
+            mBackgroundButton->setColor(opaque);
+            mTransparentCheck->setChecked(false);
+            mBackgroundButton->setEnabled(true);
+        }
+        mScene->setCanvasColor(opaque);
+        QSignalBlocker blockTheme(mViewThemeBgCheck);
+        mViewThemeBgCheck->setChecked(false);
+        onViewBackgroundChanged();
+    });
+    QWidget *backgroundGroup = labeled(tr("Background"), mViewBgButton, mOverlayBar);
+    backgroundGroup->layout()->addWidget(mViewThemeBgCheck);
+
+    QToolButton *borderButton = makeBorderButton(mOverlayBar);
 
     mViewAnimateCheck = new QCheckBox(tr("Animate"), mOverlayBar);
     mViewAnimateCheck->setToolTip(tr("Play animated images (GIF, animated WebP / PNG). Space toggles it."));
@@ -312,28 +465,33 @@ void CollageWidget::buildOverlay() {
 
     mViewPanelButton = new QPushButton(tr("Tile settings"), mOverlayBar);
     mViewPanelButton->setCheckable(true);
-    mViewPanelButton->setToolTip(tr("Aspect ratio, size, crop and resolution of the selected tile (also: right-click a tile)"));
+    mViewPanelButton->setToolTip(tr("Aspect ratio, size, crop, outline and resolution of the selected tile (also: right-click a tile)"));
     connect(mViewPanelButton, &QPushButton::toggled, this, [this](bool checked) { setPanelVisible(checked); });
 
     QPushButton *editButton = new QPushButton(tr("Edit / Export"), mOverlayBar);
     editButton->setToolTip(tr("Arrange freely on a fixed canvas and save the collage as an image (E)"));
     connect(editButton, &QPushButton::clicked, this, [this]() { setMode(CollageMode::Edit); });
 
-    for(QPushButton *button : {backButton, addButton, mViewPanelButton, editButton})
+    for(QPushButton *button : {exitButton, addButton, mViewPanelButton, editButton, mViewLayoutPanelButton})
         button->setFocusPolicy(Qt::NoFocus);
     mViewLayoutCombo->setFocusPolicy(Qt::NoFocus);
 
-    mOverlayLayout->addWidget(backButton);
-    mOverlayLayout->addWidget(addButton);
+    mOverlayLayout->addWidget(exitButton);
     mOverlayLayout->addWidget(labeled(tr("Layout"), mViewLayoutCombo, mOverlayBar));
+    mOverlayLayout->addWidget(mViewLayoutPanelButton);
     mOverlayLayout->addWidget(labeled(tr("Canvas"), mViewShapeCombo, mOverlayBar));
+    mOverlayLayout->addWidget(mViewCustomBox);
     mOverlayLayout->addWidget(labeled(tr("Gap"), mViewGapSpin, mOverlayBar));
+    mOverlayLayout->addWidget(backgroundGroup);
+    mOverlayLayout->addWidget(borderButton);
     mOverlayLayout->addWidget(mViewAnimateCheck);
     mOverlayLayout->addWidget(mViewCropButton);
     mOverlayLayout->addWidget(mViewPanelButton);
     mOverlayLayout->addWidget(editButton);
+    mOverlayLayout->addWidget(addButton);
+    mOverlayLayout->setTrailingWidget(addButton); // far right, the rest wraps left of it
 
-    initSlideBar(mViewBar, mOverlayBar, 780);
+    initSlideBar(mViewBar, mOverlayBar, 1200);
     initSlideBar(mEditBar, mToolbar, 0);
 
     mOverlayTimer = new QTimer(this);
@@ -360,27 +518,235 @@ void CollageWidget::buildOverlay() {
     mEmptyHint->hide();
 }
 
+//------------------------------------------------------------------------------
+// tile outline popup (view bar and editor toolbar share the settings)
+QToolButton *CollageWidget::makeBorderButton(QWidget *parent) {
+    QToolButton *button = new QToolButton(parent);
+    button->setText(tr("Border"));
+    button->setToolTip(tr("Outline of every tile: width, colour and style. A tile can have its own (Tile settings)."));
+    button->setPopupMode(QToolButton::InstantPopup);
+    button->setFocusPolicy(Qt::NoFocus);
+    button->setAccessibleName("CollageBarToolButton");
+    QMenu *menu = new QMenu(button);
+    menu->setAccessibleName("CollagePopup");
+    QWidget *card = new QWidget(menu);
+    card->setAccessibleName("CollagePopupCard");
+    QGridLayout *grid = new QGridLayout(card);
+    grid->setContentsMargins(12, 10, 12, 10);
+    grid->setHorizontalSpacing(10);
+    grid->setVerticalSpacing(8);
+
+    BorderPopup popup;
+    popup.width = new ScrubSpinBox(card);
+    popup.width->setRange(0, 64);
+    popup.width->setSuffix(" px");
+    popup.width->setSpecialValueText(tr("None"));
+    popup.width->setToolTip(tr("Drag sideways to change it, or click to type"));
+    popup.color = new ColorSelectorButton(card);
+    popup.color->setMinimumSize(40, 22);
+    popup.color->setCursor(Qt::PointingHandCursor);
+    popup.color->setDescription(tr("Tile outline"));
+    popup.themeColor = new QCheckBox(tr("Theme colour"), card);
+    popup.style = new QComboBox(card);
+    for(const char *name : BORDER_STYLE_NAMES)
+        popup.style->addItem(tr(name));
+    grid->addWidget(new QLabel(tr("Width"), card), 0, 0);
+    grid->addWidget(popup.width, 0, 1, 1, 2);
+    grid->addWidget(new QLabel(tr("Colour"), card), 1, 0);
+    grid->addWidget(popup.color, 1, 1);
+    grid->addWidget(popup.themeColor, 1, 2);
+    grid->addWidget(new QLabel(tr("Style"), card), 2, 0);
+    grid->addWidget(popup.style, 2, 1, 1, 2);
+
+    QWidgetAction *action = new QWidgetAction(menu);
+    action->setDefaultWidget(card);
+    menu->addAction(action);
+    button->setMenu(menu);
+    connect(menu, &QMenu::aboutToShow, this, &CollageWidget::syncBorderPopups);
+
+    auto apply = [this, popup]() {
+        if(mSyncing)
+            return;
+        QColor color = popup.themeColor->isChecked() ? QColor() : popup.color->color();
+        applyDefaultBorder(popup.width->value(), color, popup.style->currentIndex());
+    };
+    connect(popup.width, qOverload<int>(&QSpinBox::valueChanged), this, apply);
+    connect(popup.style, qOverload<int>(&QComboBox::currentIndexChanged), this, apply);
+    connect(popup.themeColor, &QCheckBox::toggled, this, apply);
+    connect(popup.color, &ColorSelectorButton::colorChanged, this, [popup, apply]() {
+        QSignalBlocker block(popup.themeColor);
+        popup.themeColor->setChecked(false);
+        apply();
+    });
+    mBorderPopups.append(popup);
+    return button;
+}
+
+void CollageWidget::applyDefaultBorder(int width, const QColor &color, int style) {
+    settings->setCollageBorderWidth(width);
+    settings->setCollageBorderColor(color);
+    settings->setCollageBorderStyle(style);
+    mScene->setDefaultBorder(width, color, style);
+    syncBorderPopups();
+    updatePanel();
+}
+
+void CollageWidget::syncBorderPopups() {
+    bool wasSyncing = mSyncing;
+    mSyncing = true;
+    QColor color = settings->collageBorderColor();
+    for(const BorderPopup &popup : mBorderPopups) {
+        popup.width->setValue(settings->collageBorderWidth());
+        popup.themeColor->setChecked(!color.isValid());
+        popup.color->setColor(color.isValid() ? color : settings->colorScheme().widget_border);
+        popup.style->setCurrentIndex(settings->collageBorderStyle());
+    }
+    mSyncing = wasSyncing;
+}
+
+//------------------------------------------------------------------------------
+// view canvas: "window" fills the viewer, a pixel size becomes the canvas of view and editor alike
+void CollageWidget::restoreViewCanvas() {
+    QString saved = settings->collageViewCanvas();
+    QStringList parts = saved.split('x');
+    int w = 0, h = 0;
+    if(parts.size() == 2) {
+        w = parts.at(0).toInt();
+        h = parts.at(1).toInt();
+    }
+    if(w <= 0 || h <= 0) {
+        QSignalBlocker block(mViewShapeCombo);
+        mViewShapeCombo->setCurrentIndex(0);
+        mScene->setViewShape(0.0);
+        return;
+    }
+    int preset = presetIndexFor(w, h);
+    {
+        QSignalBlocker block(mViewShapeCombo);
+        mViewShapeCombo->setCurrentIndex(preset >= 0 ? preset + 1 : CANVAS_CUSTOM);
+    }
+    applyViewCanvas(w, h);
+}
+
+void CollageWidget::onViewCanvasChanged(int index) {
+    if(mSyncing || index < 0)
+        return;
+    if(index == 0) {
+        mScene->setViewShape(0.0);
+        settings->setCollageViewCanvas("window");
+    } else if(index <= COLLAGE_PRESET_COUNT) {
+        const CollagePreset &preset = COLLAGE_PRESETS[index - 1];
+        applyViewCanvas(preset.width, preset.height);
+    } else {
+        QSize size = mScene->canvasSize();
+        applyViewCanvas(size.width(), size.height());
+    }
+    updateLayoutRows(); // shows / hides the custom size fields
+    mView->fitCanvas();
+    mView->setFocus();
+}
+
+void CollageWidget::applyViewCanvas(int width, int height) {
+    width = qBound(16, width, 16384);
+    height = qBound(16, height, 16384);
+    if(static_cast<qint64>(width) * height > MAX_CANVAS_PIXELS) {
+        height = static_cast<int>(MAX_CANVAS_PIXELS / width);
+        setNotice(tr("Canvas limited to 150 megapixels (the largest image that can be exported)."), true);
+    }
+    mScene->setCanvasSize(QSize(width, height));
+    mScene->setViewShape(static_cast<qreal>(width) / height);
+    settings->setCollageViewCanvas(QString("%1x%2").arg(width).arg(height));
+    bool wasSyncing = mSyncing;
+    mSyncing = true;
+    {
+        // the editor shows the same canvas
+        QSignalBlocker blockW(mCanvasWidthSpin);
+        QSignalBlocker blockH(mCanvasHeightSpin);
+        QSignalBlocker blockPreset(mPresetCombo);
+        mCanvasWidthSpin->setValue(width);
+        mCanvasHeightSpin->setValue(height);
+        int preset = presetIndexFor(width, height);
+        mPresetCombo->setCurrentIndex(preset >= 0 ? preset : COLLAGE_PRESET_COUNT);
+    }
+    mViewCanvasWSpin->setValue(width);
+    mViewCanvasHSpin->setValue(height);
+    mSyncing = wasSyncing;
+    if(mView->isAutoFit())
+        mView->fitCanvas();
+    updateStatus();
+}
+
+// the editor canvas changed: a view that uses a pixel canvas follows it, "Window" stays the window
+void CollageWidget::syncViewCanvasCombo() {
+    if(mViewShapeCombo->currentIndex() == 0)
+        return;
+    QSize size = mScene->canvasSize();
+    int preset = presetIndexFor(size.width(), size.height());
+    bool wasSyncing = mSyncing;
+    mSyncing = true;
+    {
+        QSignalBlocker block(mViewShapeCombo);
+        mViewShapeCombo->setCurrentIndex(preset >= 0 ? preset + 1 : CANVAS_CUSTOM);
+    }
+    mViewCanvasWSpin->setValue(size.width());
+    mViewCanvasHSpin->setValue(size.height());
+    mSyncing = wasSyncing;
+    mScene->setViewShape(static_cast<qreal>(size.width()) / size.height());
+    settings->setCollageViewCanvas(QString("%1x%2").arg(size.width()).arg(size.height()));
+    updateLayoutRows();
+}
+
+void CollageWidget::onViewBackgroundChanged() {
+    bool theme = mViewThemeBgCheck->isChecked();
+    settings->setCollageViewThemeBackground(theme);
+    mScene->setThemeBackground(theme);
+}
+
+void CollageWidget::syncBackgroundControls() {
+    QSignalBlocker blockTheme(mViewThemeBgCheck);
+    QSignalBlocker blockColor(mViewBgButton);
+    mViewThemeBgCheck->setChecked(settings->collageViewThemeBackground());
+    QColor color = mScene->canvasColor();
+    mViewBgButton->setColor(QColor(color.red(), color.green(), color.blue()));
+    mScene->setThemeBackground(mViewThemeBgCheck->isChecked());
+}
+
 // panel: a floating card at the right edge of the view
+QRect CollageWidget::contentArea() const {
+    int t = mRulers ? mRulers->thickness() : 0;
+    return mView->geometry().adjusted(t, t, 0, 0);
+}
+
 void CollageWidget::layoutPanel() {
-    QRect area = mView->geometry();
-    int width = qMax(160, qMin(PANEL_WIDTH, area.width() - 2 * PANEL_MARGIN));
+    QRect area = contentArea();
     int height = qMax(120, area.height() - 2 * PANEL_MARGIN);
+    int width = qMax(160, qMin(mPanelWidth, area.width() - 2 * PANEL_MARGIN));
     mPanelContainer->setGeometry(area.right() - width - PANEL_MARGIN + 1, area.y() + PANEL_MARGIN, width, height);
+    // layout options card: left edge
+    int layoutWidth = qMax(160, qMin(LAYOUT_PANEL_WIDTH, area.width() - 2 * PANEL_MARGIN));
+    mLayoutPanel->setGeometry(area.x() + PANEL_MARGIN, area.y() + PANEL_MARGIN, layoutWidth, height);
 }
 
 // bar centered at the top of the view (beside the panel when it is open), wraps on narrow windows
 void CollageWidget::layoutOverlays() {
-    QRect area = mView->geometry();
+    QRect area = contentArea();
     mEmptyHint->setGeometry(area);
     mEmptyHint->raise();
     layoutPanel();
     mPanelContainer->raise();
 
+    mLayoutPanel->raise();
+    // the bar sits between the floating cards when there is room for it
     QRect barArea = area;
     if(mPanelContainer->isVisible()) {
-        int room = mPanelContainer->x() - PANEL_MARGIN - area.x();
+        int room = mPanelContainer->x() - PANEL_MARGIN - barArea.x();
         if(room >= BAR_MIN_WIDTH)
             barArea.setWidth(room);
+    }
+    if(mLayoutPanel->isVisible()) {
+        int left = mLayoutPanel->geometry().right() + 1;
+        if(barArea.right() - left >= BAR_MIN_WIDTH)
+            barArea.setLeft(left);
     }
     placeBar(mViewBar, barArea, mOverlayLayout);
     placeBar(mEditBar, barArea, mToolbarLayout);
@@ -572,11 +938,10 @@ void CollageWidget::buildToolbar() {
     connect(viewButton, &QPushButton::clicked, this, [this]() { setMode(CollageMode::View); });
     layout->addWidget(viewButton);
 
-    QPushButton *addButton = makeButton(tr("Add images..."), tr("Add more images to the collage (you can also drop files here)"));
+    QPushButton *addButton = makeButton(tr("+ Add images..."), tr("Add more images to the collage (you can also drop files here)"));
     QPushButton *newButton = makeButton(tr("New"), tr("Remove all images and start over"));
     connect(addButton, &QPushButton::clicked, this, &CollageWidget::onAddImages);
     connect(newButton, &QPushButton::clicked, this, &CollageWidget::onNewCollage);
-    layout->addWidget(addButton);
     layout->addWidget(newButton);
 
     // layout
@@ -584,15 +949,19 @@ void CollageWidget::buildToolbar() {
     mLayoutCombo->addItems({ tr("Mosaic"), tr("Grid"), tr("Row"), tr("Column"), tr("Freehand") });
     mLayoutCombo->setToolTip(tr("Mosaic, Grid, Row and Column arrange the images for you (drag pans the picture, Ctrl+drag swaps two frames). "
                                 "Freehand lets you move and resize every frame yourself."));
-    mGapSpin = new QSpinBox(mToolbar);
+    mGapSpin = new ScrubSpinBox(mToolbar);
     mGapSpin->setRange(0, 400);
     mGapSpin->setValue(12);
     mGapSpin->setSuffix(" px");
-    mGapSpin->setKeyboardTracking(false);
     mGapSpin->setToolTip(tr("Spacing between images and around the edges"));
     connect(mLayoutCombo, qOverload<int>(&QComboBox::currentIndexChanged), this, [this]() { applyEditLayout(); });
     connect(mGapSpin, qOverload<int>(&QSpinBox::valueChanged), this, [this]() { applyEditLayout(); });
+    mEditLayoutPanelButton = makeButton(tr("Layout options"), tr("Grid / Row / Column: number of columns and rows, cell size, rotation and cell style"));
+    mEditLayoutPanelButton->setCheckable(true);
+    mEditLayoutPanelButton->setVisible(false);
+    connect(mEditLayoutPanelButton, &QPushButton::toggled, this, &CollageWidget::setLayoutPanelVisible);
     layout->addWidget(labeled(tr("Layout"), mLayoutCombo, mToolbar));
+    layout->addWidget(mEditLayoutPanelButton);
     layout->addWidget(labeled(tr("Gap"), mGapSpin, mToolbar));
 
     mEditCropButton = makeButton(tr("Crop"), tr("Crop: drag moves the picture inside its frame, the wheel zooms it (resize handles are off while on)"));
@@ -603,18 +972,18 @@ void CollageWidget::buildToolbar() {
 
     // canvas
     mPresetCombo = new QComboBox(mToolbar);
-    for(int i = 0; i < PRESET_COUNT; i++)
-        mPresetCombo->addItem(tr(PRESETS[i].name));
+    for(int i = 0; i < COLLAGE_PRESET_COUNT; i++)
+        mPresetCombo->addItem(tr(COLLAGE_PRESETS[i].name));
     mPresetCombo->addItem(tr("Custom"));
-    mCanvasWidthSpin = new QSpinBox(mToolbar);
-    mCanvasHeightSpin = new QSpinBox(mToolbar);
-    for(QSpinBox *spin : {mCanvasWidthSpin, mCanvasHeightSpin}) {
+    mCanvasWidthSpin = new ScrubSpinBox(mToolbar);
+    mCanvasHeightSpin = new ScrubSpinBox(mToolbar);
+    for(ScrubSpinBox *spin : {mCanvasWidthSpin, mCanvasHeightSpin}) {
         spin->setRange(16, 16384);
-        spin->setKeyboardTracking(false);
         spin->setSuffix(" px");
+        spin->setToolTip(tr("Canvas size. Drag sideways to change it (Shift = faster, Alt = finer), or click to type."));
     }
-    mCanvasWidthSpin->setValue(PRESETS[0].width);
-    mCanvasHeightSpin->setValue(PRESETS[0].height);
+    mCanvasWidthSpin->setValue(COLLAGE_PRESETS[0].width);
+    mCanvasHeightSpin->setValue(COLLAGE_PRESETS[0].height);
     connect(mPresetCombo, qOverload<int>(&QComboBox::currentIndexChanged), this, &CollageWidget::onPresetChanged);
     connect(mCanvasWidthSpin, qOverload<int>(&QSpinBox::valueChanged), this, &CollageWidget::onCanvasSpinChanged);
     connect(mCanvasHeightSpin, qOverload<int>(&QSpinBox::valueChanged), this, &CollageWidget::onCanvasSpinChanged);
@@ -634,6 +1003,7 @@ void CollageWidget::buildToolbar() {
     connect(mTransparentCheck, &QCheckBox::toggled, this, &CollageWidget::onCanvasColorChanged);
     layout->addWidget(labeled(tr("Background"), mBackgroundButton, mToolbar));
     layout->addWidget(mTransparentCheck);
+    layout->addWidget(makeBorderButton(mToolbar));
 
     // view / output
     QPushButton *fitButton = makeButton(tr("Fit view"), tr("Fit the whole canvas into the window (Ctrl+0)"));
@@ -654,6 +1024,8 @@ void CollageWidget::buildToolbar() {
     layout->addWidget(mAnimateCheck);
     layout->addWidget(mPanelToggle);
     layout->addWidget(exportButton);
+    layout->addWidget(addButton);
+    layout->setTrailingWidget(addButton); // far right, like in the view bar
 }
 
 void CollageWidget::buildPanel() {
@@ -702,9 +1074,8 @@ void CollageWidget::buildPanel() {
         return label;
     };
     auto makeSpin = [this](int min, int max) {
-        QSpinBox *spin = new QSpinBox(mPanelContent);
+        ScrubSpinBox *spin = new ScrubSpinBox(mPanelContent);
         spin->setRange(min, max);
-        spin->setKeyboardTracking(false);
         return spin;
     };
     // two controls side by side across the control + value columns
@@ -719,6 +1090,21 @@ void CollageWidget::buildPanel() {
     };
 
     sectionTitle(tr("Frame"));
+    // automatic layouts: what dragging the border between two tiles does
+    QLabel *bordersLabel = new QLabel(tr("Borders"), mPanelContent);
+    mBorderModeCombo = new QComboBox(mPanelContent);
+    mBorderModeCombo->addItems({ tr("Snap to sizes"), tr("Free"), tr("Locked") });
+    mBorderModeCombo->setToolTip(tr("Dragging the border between two tiles resizes them. Snap: locks to 1/4, 1/3, 1/2, 2/3, 3/4 "
+                                    "and equal sizes (hold Alt to drag freely). Free: any size. Locked: borders can not be dragged."));
+    grid->addWidget(bordersLabel, row, 0);
+    grid->addWidget(mBorderModeCombo, row++, 1, 1, 2);
+    mBorderModeWidgets << bordersLabel << mBorderModeCombo;
+    connect(mBorderModeCombo, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int index) {
+        if(mSyncing || index < 0)
+            return;
+        syncBorderModeCombos(index);
+    });
+
     mFitCombo = new QComboBox(mPanelContent);
     mFitCombo->addItems({ tr("Fill (crop to frame)"), tr("Contain (whole image)"), tr("Stretch") });
     grid->addWidget(new QLabel(tr("Fit"), mPanelContent), row, 0);
@@ -752,13 +1138,23 @@ void CollageWidget::buildPanel() {
     grid->addWidget(aspectLabel, row, 0);
     grid->addWidget(mViewAspectCombo, row++, 1, 1, 2);
     QLabel *sizeLabel = new QLabel(tr("Size"), mPanelContent);
-    mViewSizeSlider = new QSlider(Qt::Horizontal, mPanelContent);
-    mViewSizeSlider->setRange(50, 300);
-    mViewSizeValueLabel = makeValueLabel();
+    mViewWSpin = makeSpin(24, 20000);
+    mViewHSpin = makeSpin(24, 20000);
+    mViewWSpin->setPrefix("W  ");
+    mViewHSpin->setPrefix("H  ");
+    for(ScrubSpinBox *spin : { mViewWSpin, mViewHSpin }) {
+        spin->setToolTip(tr("Size of the tile in pixels: drag sideways (Shift = faster, Alt = finer) or click to type. "
+                            "The automatic layouts get as close as the neighbours allow; Freehand is exact."));
+    }
+    QWidget *viewSizePair = pairRow(mViewWSpin, mViewHSpin);
     grid->addWidget(sizeLabel, row, 0);
-    grid->addWidget(mViewSizeSlider, row, 1);
-    grid->addWidget(mViewSizeValueLabel, row++, 2);
-    mViewOnlyWidgets << aspectLabel << mViewAspectCombo << sizeLabel << mViewSizeSlider << mViewSizeValueLabel;
+    grid->addWidget(viewSizePair, row++, 1, 1, 2);
+    QPushButton *resetSizeButton = new QPushButton(tr("Reset size"), mPanelContent);
+    resetSizeButton->setFocusPolicy(Qt::NoFocus);
+    resetSizeButton->setToolTip(tr("Back to the automatic size and shape"));
+    grid->addWidget(resetSizeButton, row++, 1, 1, 2);
+    mViewSizeWidgets << sizeLabel << viewSizePair;
+    mViewOnlyWidgets << aspectLabel << mViewAspectCombo << resetSizeButton;
 
     sectionTitle(tr("Crop"));
     mZoomSlider = new QSlider(Qt::Horizontal, mPanelContent);
@@ -789,6 +1185,24 @@ void CollageWidget::buildPanel() {
     mRadiusSpin->setSuffix(" px");
     grid->addWidget(new QLabel(tr("Corners"), mPanelContent), row, 0);
     grid->addWidget(mRadiusSpin, row++, 1, 1, 2);
+
+    // this tile's own outline (otherwise the Border default of the bar)
+    mTileBorderSpin = makeSpin(0, 64);
+    mTileBorderSpin->setSuffix(" px");
+    mTileBorderSpin->setSpecialValueText(tr("None"));
+    mTileBorderColor = new ColorSelectorButton(mPanelContent);
+    mTileBorderColor->setMinimumSize(40, 22);
+    mTileBorderColor->setCursor(Qt::PointingHandCursor);
+    mTileBorderColor->setDescription(tr("Tile outline"));
+    mTileBorderStyle = new QComboBox(mPanelContent);
+    for(const char *name : BORDER_STYLE_NAMES)
+        mTileBorderStyle->addItem(tr(name));
+    QPushButton *borderDefaultButton = new QPushButton(tr("Use default"), mPanelContent);
+    borderDefaultButton->setFocusPolicy(Qt::NoFocus);
+    borderDefaultButton->setToolTip(tr("Follow the Border setting of the bar again"));
+    grid->addWidget(new QLabel(tr("Border"), mPanelContent), row, 0);
+    grid->addWidget(pairRow(mTileBorderSpin, mTileBorderColor), row++, 1, 1, 2);
+    grid->addWidget(pairRow(mTileBorderStyle, borderDefaultButton), row++, 1, 1, 2);
 
     sectionTitle(tr("Memory"));
     mResolutionCombo = new QComboBox(mPanelContent);
@@ -856,6 +1270,14 @@ void CollageWidget::buildPanel() {
     // header with the hide button; lives outside the scroll area so it stays usable
     // while the properties are disabled (nothing selected)
     mPanelContainer = new CollagePanelFrame(this);
+    mPanelContainer->setResizeEdge(Qt::LeftEdge);
+    connect(mPanelContainer, &CollagePanelFrame::widthDragged, this, [this](int width) {
+        mPanelWidth = qBound(MIN_PANEL_WIDTH, width, MAX_PANEL_WIDTH);
+        layoutOverlays();
+    });
+    connect(mPanelContainer, &CollagePanelFrame::resizeFinished, this, [this]() {
+        settings->setCollagePanelWidth(mPanelWidth);
+    });
     QPushButton *hidePanelButton = new QPushButton(tr("Hide panel"), mPanelContainer);
     setButtonIcon(hidePanelButton, "menuitem/chevron-right16");
     hidePanelButton->setLayoutDirection(Qt::RightToLeft); // chevron after the label
@@ -940,13 +1362,33 @@ void CollageWidget::buildPanel() {
             item->setViewAspect(VIEW_ASPECTS[index]);
         mScene->relayoutView();
     });
-    connect(mViewSizeSlider, &QSlider::valueChanged, this, [this](int value) {
+    connect(mViewWSpin, qOverload<int>(&QSpinBox::valueChanged), this, [this](int) { applyViewSize(0); });
+    connect(mViewHSpin, qOverload<int>(&QSpinBox::valueChanged), this, [this](int) { applyViewSize(1); });
+    connect(resetSizeButton, &QPushButton::clicked, this, [this]() {
+        for(CollageItem *item : targets()) {
+            item->setViewAspect(0.0);
+            item->setViewWeight(1.0);
+            mScene->clearSplitsFor(item);
+        }
+        mScene->relayoutView();
+    });
+    auto applyTileBorder = [this]() {
         if(mSyncing)
             return;
-        for(CollageItem *item : targets())
-            item->setViewWeight(value / 100.0);
-        mViewSizeValueLabel->setText(QString::number(value) + "%");
-        mScene->relayoutView();
+        for(CollageItem *item : targets()) {
+            item->setBorderOverride(true);
+            item->setBorder(mTileBorderSpin->value(), mTileBorderColor->color(), mTileBorderStyle->currentIndex());
+        }
+    };
+    connect(mTileBorderSpin, qOverload<int>(&QSpinBox::valueChanged), this, applyTileBorder);
+    connect(mTileBorderColor, &ColorSelectorButton::colorChanged, this, applyTileBorder);
+    connect(mTileBorderStyle, qOverload<int>(&QComboBox::currentIndexChanged), this, applyTileBorder);
+    connect(borderDefaultButton, &QPushButton::clicked, this, [this]() {
+        for(CollageItem *item : targets()) {
+            item->setBorderOverride(false);
+            item->setBorder(settings->collageBorderWidth(), settings->collageBorderColor(), settings->collageBorderStyle());
+        }
+        updatePanel();
     });
     connect(mZoomSlider, &QSlider::valueChanged, this, [this](int value) {
         if(mSyncing)
@@ -1062,6 +1504,43 @@ void CollageWidget::applyGeometry(int source) {
     updatePanel();
 }
 
+// W / H of the selected tile. Freehand: exact, around the tile centre. Automatic layouts: the tile's
+// aspect and share are adjusted, the result is as close as the neighbours allow (written back by updatePanel)
+void CollageWidget::applyViewSize(int source) {
+    CollageItem *item = primaryItem();
+    if(mSyncing || !item || isEditMode())
+        return;
+    qreal w = mViewWSpin->value(), h = mViewHSpin->value();
+    if(mScene->isFreeView()) {
+        QSizeF old = item->frameSize();
+        QPointF center = item->pos() + QPointF(old.width() / 2.0, old.height() / 2.0);
+        item->setFrameSize(QSizeF(w, h));
+        item->setPos(center - QPointF(w / 2.0, h / 2.0));
+        emit mScene->itemEdited();
+        return;
+    }
+    QSizeF current = item->frameSize();
+    item->setViewAspect(w / h);
+    if(source == 0 && current.width() > 0)
+        item->setViewWeight(item->viewWeight() * w / current.width());
+    else if(source == 1 && current.height() > 0)
+        item->setViewWeight(item->viewWeight() * h / current.height());
+    mScene->clearSplitsFor(item);
+    mScene->relayoutView();
+}
+
+// one border mode for the panel combo, the layout panel combo and the scene
+void CollageWidget::syncBorderModeCombos(int mode) {
+    settings->setCollageBorderMode(mode);
+    for(QComboBox *combo : { mBorderModeCombo, mLayBorderMode }) {
+        if(!combo)
+            continue;
+        QSignalBlocker block(combo);
+        combo->setCurrentIndex(mode);
+    }
+    mScene->refreshSeparators();
+}
+
 // mirrors the first selected item into the panel
 void CollageWidget::updatePanel() {
     mSyncing = true;
@@ -1123,9 +1602,12 @@ void CollageWidget::updatePanel() {
             aspectIndex = i;
     }
     mViewAspectCombo->setCurrentIndex(aspectIndex);
-    int size = qRound(item->viewWeight() * 100.0);
-    mViewSizeSlider->setValue(size);
-    mViewSizeValueLabel->setText(QString::number(size) + "%");
+    mViewWSpin->setValue(qRound(item->frameSize().width()));
+    mViewHSpin->setValue(qRound(item->frameSize().height()));
+    mTileBorderSpin->setValue(item->borderWidth());
+    mTileBorderColor->setColor(item->effectiveBorderColor());
+    mTileBorderStyle->setCurrentIndex(item->borderStyle());
+    mBorderModeCombo->setCurrentIndex(settings->collageBorderMode());
 
     CollageItem *animated = nullptr;
     for(CollageItem *candidate : selected) {
@@ -1208,22 +1690,22 @@ void CollageWidget::onNewCollage() {
 
 //------------------------------------------------------------------------------
 void CollageWidget::onPresetChanged(int index) {
-    if(index < 0 || index >= PRESET_COUNT)
+    if(index < 0 || index >= COLLAGE_PRESET_COUNT)
         return; // "Custom": keep the current values
     {
         QSignalBlocker blockW(mCanvasWidthSpin);
         QSignalBlocker blockH(mCanvasHeightSpin);
-        mCanvasWidthSpin->setValue(PRESETS[index].width);
-        mCanvasHeightSpin->setValue(PRESETS[index].height);
+        mCanvasWidthSpin->setValue(COLLAGE_PRESETS[index].width);
+        mCanvasHeightSpin->setValue(COLLAGE_PRESETS[index].height);
     }
     applyCanvasSize();
 }
 
 void CollageWidget::onCanvasSpinChanged() {
     // switch the preset box to a matching preset, or to "Custom"
-    int match = PRESET_COUNT;
-    for(int i = 0; i < PRESET_COUNT; i++) {
-        if(PRESETS[i].width == mCanvasWidthSpin->value() && PRESETS[i].height == mCanvasHeightSpin->value())
+    int match = COLLAGE_PRESET_COUNT;
+    for(int i = 0; i < COLLAGE_PRESET_COUNT; i++) {
+        if(COLLAGE_PRESETS[i].width == mCanvasWidthSpin->value() && COLLAGE_PRESETS[i].height == mCanvasHeightSpin->value())
             match = i;
     }
     {
@@ -1235,6 +1717,7 @@ void CollageWidget::onCanvasSpinChanged() {
 
 void CollageWidget::applyCanvasSize() {
     mScene->setCanvasSize(QSize(mCanvasWidthSpin->value(), mCanvasHeightSpin->value()));
+    syncViewCanvasCombo();
     if(mView->isAutoFit())
         mView->fitCanvas();
     updateStatus();
@@ -1295,6 +1778,7 @@ void CollageWidget::onCanvasColorChanged() {
         color.setAlpha(0);
     mBackgroundButton->setEnabled(!mTransparentCheck->isChecked());
     mScene->setCanvasColor(color);
+    syncBackgroundControls();
 }
 
 //------------------------------------------------------------------------------
@@ -1406,7 +1890,10 @@ QString CollageWidget::helpHtml(bool edit) {
         html += "<p><b>" + tr("Collage view").toHtmlEscaped() + "</b></p>";
         html += section(tr("Mouse"), {
             { tr("Wheel"), tr("zoom the whole collage") },
-            { tr("Drag empty space / middle-drag"), tr("pan the whole collage") },
+            { tr("Hold the middle button + move"), tr("move the whole collage freely, also when starting on a tile") },
+            { tr("Middle click"), tr("fit the collage back into the window") },
+            { tr("Drag empty space"), tr("pan the whole collage") },
+            { tr("Drag the border between two tiles"), tr("resize them (Snap locks to 1/4, 1/3, 1/2, 2/3, 3/4; Alt = free); double-click = reset") },
             { tr("Click a tile"), tr("select it and show its settings") },
             { tr("Drag a tile"), tr("move the picture inside its tile") },
             { tr("Shift + wheel"), tr("zoom the picture inside the tile") },
@@ -1418,20 +1905,27 @@ QString CollageWidget::helpHtml(bool edit) {
             { tr("Left / Right"), tr("select previous / next tile") },
             { tr("Enter"), tr("open the selected tile") },
             { tr("Delete / Backspace"), tr("remove the selected tile") },
-            { tr("Esc"), tr("clear the selection") },
+            { tr("Esc"), tr("clear the selection; nothing selected: exit the collage (asks first)") },
             { tr("Space"), tr("play / pause the selected animation (none selected: all)") },
             { tr("+ / -"), tr("zoom the whole collage") },
+            { tr("Ctrl + 0"), tr("fit the collage into the window") },
             { tr("E"), tr("switch to the editor") } });
         html += section(tr("Features"), {
+            { tr("Exit"), tr("back to the image viewer (asks first); the collage stays in memory, Ctrl+G resumes it") },
             { tr("Layout"), tr("Mosaic, Grid, Row, Column or Freehand") },
-            { tr("Canvas"), tr("frame shape: Window, 16:9, 4:5, mobile 9:16 or square (not used by Freehand)") },
+            { tr("Layout options"), tr("Grid / Row / Column: columns, rows, cell size, rotation and cell style (tiles, circle, hexagon, polygon / star...)") },
+            { tr("Canvas"), tr("Window, a pixel resolution (shared with the editor canvas) or Custom W x H (not used by Freehand)") },
+            { tr("Background"), tr("Theme = app background and pattern; or a colour of your own (also the editor canvas colour)") },
+            { tr("Border"), tr("outline of every tile: width, colour, style (solid, dashed, dotted, dash-dot, double)") },
             { tr("Crop (Freehand)"), tr("drag moves the picture inside the tile, wheel zooms it, handles are off") },
             { tr("Gap"), tr("spacing between tiles (not used by Freehand)") },
             { tr("Aspect"), tr("shape of the selected tile (Original, 1:1, 4:3, 16:9, ...)") },
-            { tr("Size"), tr("how much room the tile takes in the mosaic") },
+            { tr("Size W / H"), tr("drag the W / H label sideways (Shift = faster, Alt = finer) or type; exact in Freehand") },
+            { tr("Borders"), tr("Snap to sizes, Free or Locked dragging of the borders between tiles") },
             { tr("Fit"), tr("Fill (crop), Contain or Stretch") },
             { tr("Zoom / Reset crop"), tr("frame the picture inside the tile") },
             { tr("Opacity / Corners"), tr("transparency and rounded corners") },
+            { tr("Border (tile)"), tr("this tile's own outline; Use default follows the bar again") },
             { tr("Resolution"), tr("working copy size, lower it to save memory") },
             { tr("Animate"), tr("play GIF / animated WebP / PNG tiles; per tile: Play, Loop, Speed") },
             { tr("Edit / Export"), tr("arrange freely and save as an image") } });
@@ -1448,7 +1942,8 @@ QString CollageWidget::helpHtml(bool edit) {
         html += "<p><b>" + tr("Collage editor").toHtmlEscaped() + "</b></p>";
         html += section(tr("Mouse"), {
             { tr("Wheel"), tr("zoom the canvas") },
-            { tr("Middle-drag"), tr("pan the canvas") },
+            { tr("Hold the middle button + move"), tr("move the canvas freely (middle click fits it back)") },
+            { tr("Drag the border between two frames"), tr("automatic layouts: resize them (Alt = no snapping, double-click = reset)") },
             { tr("Click / drag a box"), tr("select one or several frames") },
             { tr("Drag a frame"), tr("move it (Ctrl disables snapping)") },
             { tr("Drag the handles"), tr("resize (Shift keeps proportions)") },
@@ -1468,8 +1963,10 @@ QString CollageWidget::helpHtml(bool edit) {
         html += section(tr("Features"), {
             { tr("Layout"), tr("Mosaic, Grid, Row and Column arrange the frames automatically, Freehand = place them yourself") },
             { tr("Crop (Freehand)"), tr("drag moves the picture inside its frame, wheel zooms it, handles are off") },
-            { tr("Canvas"), tr("size presets (incl. portrait / mobile) or custom width / height") },
+            { tr("Canvas"), tr("size presets (incl. portrait / mobile) or custom width / height, shared with the view") },
             { tr("Background / Transparent"), tr("canvas colour, PNG / WebP keep transparency") },
+            { tr("Border"), tr("outline of every frame (exported too)") },
+            { tr("Layout options"), tr("Grid / Row / Column: counts, cell size, rotation, cell style (exported too)") },
             { tr("X, Y, W, H"), tr("exact position and size of a frame") },
             { tr("Fit to border / Center"), tr("snap a frame to the canvas") },
             { tr("Fit, Zoom, Opacity, Corners"), tr("per-frame look") },
@@ -1494,6 +1991,9 @@ void CollageWidget::setPanelVisible(bool visible) {
         mEditPanelVisible = visible;
     else
         mViewPanelOpen = visible;
+    // narrow window: the two cards would cover everything, keep one
+    if(visible && width() < NARROW_WIDTH && mLayoutPanel->isVisible())
+        setLayoutPanelVisible(false);
     layoutOverlays();
     mPanelContainer->setVisible(visible);
     {
@@ -1527,4 +2027,254 @@ void CollageWidget::resizeEvent(QResizeEvent *event) {
         if(wanted != mPanelContainer->isVisible())
             setPanelVisible(wanted);
     }
+}
+
+//------------------------------------------------------------------------------
+// Layout options panel (Grid / Row / Column): floats at the left edge of the view
+void CollageWidget::buildLayoutPanel() {
+    mLayoutPanel = new CollagePanelFrame(this);
+
+    mLayoutPanelTitle = new QLabel(tr("Layout options"), mLayoutPanel);
+    QFont bold = mLayoutPanelTitle->font();
+    bold.setBold(true);
+    mLayoutPanelTitle->setFont(bold);
+    QPushButton *hideButton = new QPushButton(tr("Hide"), mLayoutPanel);
+    hideButton->setToolTip(tr("Hide this panel"));
+    hideButton->setFocusPolicy(Qt::NoFocus);
+    hideButton->setCursor(Qt::PointingHandCursor);
+    hideButton->setMinimumHeight(30);
+    connect(hideButton, &QPushButton::clicked, this, [this]() {
+        setLayoutPanelVisible(false);
+        mView->setFocus();
+    });
+    QHBoxLayout *header = new QHBoxLayout();
+    header->setContentsMargins(14, 14, 14, 10);
+    header->setSpacing(8);
+    header->addWidget(mLayoutPanelTitle, 1);
+    header->addWidget(hideButton);
+
+    QFrame *separator = new QFrame(mLayoutPanel);
+    separator->setAccessibleName("CollagePanelSeparator");
+    separator->setFrameShape(QFrame::NoFrame);
+    separator->setFixedHeight(1);
+
+    QScrollArea *scroll = new QScrollArea(mLayoutPanel);
+    scroll->setAccessibleName("CollagePanelScroll");
+    scroll->setWidgetResizable(true);
+    scroll->setFrameShape(QFrame::NoFrame);
+    scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    scroll->viewport()->setAutoFillBackground(false);
+    QWidget *content = new QWidget();
+    content->setAccessibleName("CollagePanel");
+    QVBoxLayout *contentLayout = new QVBoxLayout(content);
+    contentLayout->setContentsMargins(16, 10, 16, 18);
+    contentLayout->setSpacing(14);
+    QGridLayout *grid = new QGridLayout();
+    grid->setHorizontalSpacing(12);
+    grid->setVerticalSpacing(12);
+    grid->setColumnMinimumWidth(0, 84);
+    grid->setColumnStretch(1, 1);
+    int row = 0;
+
+    auto makeSpin = [content](int min, int max, const QString &suffix, const QString &special) {
+        ScrubSpinBox *spin = new ScrubSpinBox(content);
+        spin->setRange(min, max);
+        if(!suffix.isEmpty())
+            spin->setSuffix(suffix);
+        if(!special.isEmpty())
+            spin->setSpecialValueText(special);
+        return spin;
+    };
+    auto addRow = [content, grid, &row](const QString &text, QWidget *control, QList<QWidget*> *group) {
+        QLabel *label = new QLabel(text, content);
+        grid->addWidget(label, row, 0);
+        grid->addWidget(control, row++, 1);
+        if(group)
+            *group << label << control;
+        return label;
+    };
+    auto section = [content, grid, &row](const QString &text) {
+        QLabel *title = new QLabel(text, content);
+        title->setAccessibleName("CollageSectionTitle");
+        grid->addWidget(title, row++, 0, 1, 2);
+    };
+
+    // --- cells -------------------------------------------------------------
+    section(tr("Cells"));
+    mLayColumns = makeSpin(0, 12, QString(), tr("Auto"));
+    mLayRows = makeSpin(0, 12, QString(), tr("Auto"));
+    mLayCellW = makeSpin(0, 8000, " px", tr("Auto"));
+    mLayCellH = makeSpin(0, 8000, " px", tr("Auto"));
+    mLayCellW->setToolTip(tr("Auto: the cells share the canvas. A fixed size centres the grid (pan to see the rest)."));
+    mLayCellH->setToolTip(mLayCellW->toolTip());
+    mLayHoneycomb = new QCheckBox(tr("Honeycomb (shift every other row)"), content);
+    addRow(tr("Columns"), mLayColumns, &mLayGridRows);
+    addRow(tr("Rows"), mLayRows, &mLayGridRows);
+    addRow(tr("Cell width"), mLayCellW, &mLayGridRows);
+    addRow(tr("Cell height"), mLayCellH, &mLayGridRows);
+    grid->addWidget(mLayHoneycomb, row++, 0, 1, 2);
+    mLayGridRows << mLayHoneycomb;
+
+    mLayLines = makeSpin(1, 12, QString(), QString());
+    mLayLineSize = makeSpin(0, 8000, " px", tr("Auto"));
+    mLayLinesLabel = addRow(tr("Rows"), mLayLines, &mLayLineRows);
+    mLayLineSizeLabel = addRow(tr("Row height"), mLayLineSize, &mLayLineRows);
+
+    mLayRotation = makeSpin(-45, 45, QString::fromUtf8("\xC2\xB0"), QString());
+    mLayRotation->setToolTip(tr("Turns every tile around its centre"));
+    mLayGap = makeSpin(0, 400, " px", QString());
+    addRow(tr("Rotation"), mLayRotation, nullptr);
+    addRow(tr("Gap"), mLayGap, nullptr);
+
+    // --- style -------------------------------------------------------------
+    section(tr("Style"));
+    mLayShape = new QComboBox(content);
+    mLayShape->addItems({ tr("Default"), tr("Tiles (rounded)"), tr("Circle"), tr("Hexagon"), tr("Diamond"),
+                          tr("Triangle"), tr("Parallelogram"), tr("Custom polygon") });
+    addRow(tr("Shape"), mLayShape, nullptr);
+    mLaySides = makeSpin(3, 12, QString(), QString());
+    addRow(tr("Corners"), mLaySides, &mLayPolygonRows);
+    mLayStar = new QCheckBox(tr("Star"), content);
+    grid->addWidget(mLayStar, row++, 1);
+    mLayPolygonRows << mLayStar;
+    mLayStarDepth = makeSpin(10, 90, "%", QString());
+    mLayStarDepth->setToolTip(tr("Inner points of the star, in percent of the outer ones"));
+    addRow(tr("Star depth"), mLayStarDepth, &mLayPolygonRows);
+
+    // --- borders -----------------------------------------------------------
+    section(tr("Borders"));
+    mLayBorderMode = new QComboBox(content);
+    mLayBorderMode->addItems({ tr("Snap to sizes"), tr("Free"), tr("Locked") });
+    mLayBorderMode->setToolTip(tr("Dragging the border between two tiles resizes them. Snap: locks to 1/4, 1/3, 1/2, 2/3, 3/4 "
+                                  "and equal sizes (hold Alt to drag freely). Free: any size. Locked: borders can not be dragged."));
+    addRow(tr("Dragging"), mLayBorderMode, nullptr);
+    QPushButton *resetButton = new QPushButton(tr("Reset layout"), content);
+    resetButton->setFocusPolicy(Qt::NoFocus);
+    resetButton->setToolTip(tr("Automatic counts and sizes, no rotation, plain cells, borders back in place"));
+    grid->addWidget(resetButton, row++, 0, 1, 2);
+
+    contentLayout->addLayout(grid);
+    contentLayout->addStretch(1);
+    scroll->setWidget(content);
+
+    QVBoxLayout *outer = new QVBoxLayout(mLayoutPanel);
+    outer->setContentsMargins(1, 0, 1, 1);
+    outer->setSpacing(0);
+    outer->addLayout(header);
+    outer->addWidget(separator);
+    outer->addWidget(scroll, 1);
+    mLayoutPanel->hide();
+
+    for(ScrubSpinBox *spin : { mLayColumns, mLayRows, mLayCellW, mLayCellH, mLayLines, mLayLineSize,
+                               mLayRotation, mLaySides, mLayStarDepth })
+        connect(spin, qOverload<int>(&QSpinBox::valueChanged), this, &CollageWidget::applyLayoutPanel);
+    for(QCheckBox *check : { mLayHoneycomb, mLayStar })
+        connect(check, &QCheckBox::toggled, this, &CollageWidget::applyLayoutPanel);
+    connect(mLayShape, qOverload<int>(&QComboBox::currentIndexChanged), this, &CollageWidget::applyLayoutPanel);
+    connect(mLayGap, qOverload<int>(&QSpinBox::valueChanged), this, [this](int value) {
+        if(mSyncing)
+            return;
+        // same gap as the bar of the current mode
+        if(isEditMode())
+            mGapSpin->setValue(value);
+        else
+            mViewGapSpin->setValue(value);
+    });
+    connect(mLayBorderMode, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int index) {
+        if(mSyncing || index < 0)
+            return;
+        syncBorderModeCombos(index);
+    });
+    connect(resetButton, &QPushButton::clicked, this, [this]() {
+        mScene->setLayoutOptions(CollageLayout::Options());
+        syncLayoutPanel();
+    });
+}
+
+bool CollageWidget::layoutPanelAllowed() const {
+    return CollageLayout::usesCellOptions(mScene->activeLayout());
+}
+
+// controls follow the scene options and the current layout
+void CollageWidget::syncLayoutPanel() {
+    if(!mLayoutPanel)
+        return;
+    CollageLayout::Mode mode = mScene->activeLayout();
+    bool gridMode = (mode == CollageLayout::MODE_GRID);
+    bool rowMode = (mode == CollageLayout::MODE_ROW);
+    const CollageLayout::Options &o = mScene->layoutOptions();
+    bool wasSyncing = mSyncing;
+    mSyncing = true;
+    mLayoutPanelTitle->setText(gridMode ? tr("Grid options") : rowMode ? tr("Row options") : tr("Column options"));
+    for(QWidget *widget : mLayGridRows)
+        widget->setVisible(gridMode);
+    for(QWidget *widget : mLayLineRows)
+        widget->setVisible(!gridMode);
+    mLayLinesLabel->setText(rowMode ? tr("Rows") : tr("Columns"));
+    mLayLineSizeLabel->setText(rowMode ? tr("Row height") : tr("Column width"));
+    mLayColumns->setValue(o.columns);
+    mLayRows->setValue(o.rows);
+    mLayCellW->setValue(qRound(o.cellWidth));
+    mLayCellH->setValue(qRound(o.cellHeight));
+    mLayHoneycomb->setChecked(o.honeycomb);
+    mLayLines->setValue(qMax(1, rowMode ? o.rows : o.columns));
+    mLayLineSize->setValue(qRound(rowMode ? o.cellHeight : o.cellWidth));
+    mLayRotation->setValue(qRound(o.rotation));
+    mLayShape->setCurrentIndex(o.shape);
+    mLaySides->setValue(o.polygonSides);
+    mLayStar->setChecked(o.star);
+    mLayStarDepth->setValue(qRound(o.starDepth * 100.0));
+    for(QWidget *widget : mLayPolygonRows)
+        widget->setVisible(o.shape == CollageLayout::SHAPE_POLYGON);
+    mLayGap->setValue(isEditMode() ? mGapSpin->value() : mViewGapSpin->value());
+    mLayBorderMode->setCurrentIndex(settings->collageBorderMode());
+    mSyncing = wasSyncing;
+}
+
+void CollageWidget::applyLayoutPanel() {
+    if(mSyncing)
+        return;
+    CollageLayout::Mode mode = mScene->activeLayout();
+    CollageLayout::Options o = mScene->layoutOptions(); // keeps the dragged borders unless the structure changes
+    const CollageLayout::Options before = o;
+    if(mode == CollageLayout::MODE_GRID) {
+        o.columns = mLayColumns->value();
+        o.rows = mLayRows->value();
+        o.cellWidth = mLayCellW->value();
+        o.cellHeight = mLayCellH->value();
+        o.honeycomb = mLayHoneycomb->isChecked();
+    } else if(mode == CollageLayout::MODE_ROW) {
+        o.rows = mLayLines->value();
+        o.cellHeight = mLayLineSize->value();
+    } else if(mode == CollageLayout::MODE_COLUMN) {
+        o.columns = mLayLines->value();
+        o.cellWidth = mLayLineSize->value();
+    }
+    o.rotation = mLayRotation->value();
+    o.shape = qMax(0, mLayShape->currentIndex());
+    o.polygonSides = mLaySides->value();
+    o.star = mLayStar->isChecked();
+    o.starDepth = mLayStarDepth->value() / 100.0;
+    // different counts / sizes: the dragged borders belonged to another structure
+    if(o.columns != before.columns || o.rows != before.rows || !qFuzzyCompare(1.0 + o.cellWidth, 1.0 + before.cellWidth)
+       || !qFuzzyCompare(1.0 + o.cellHeight, 1.0 + before.cellHeight) || o.honeycomb != before.honeycomb)
+        o.splits.clear();
+    mScene->setLayoutOptions(o);
+    for(QWidget *widget : mLayPolygonRows)
+        widget->setVisible(o.shape == CollageLayout::SHAPE_POLYGON);
+}
+
+void CollageWidget::setLayoutPanelVisible(bool visible) {
+    mLayoutPanelWanted = visible;
+    bool show = visible && layoutPanelAllowed();
+    // narrow window: one floating card at a time
+    if(show && width() < NARROW_WIDTH && mPanelContainer->isVisible())
+        setPanelVisible(false);
+    for(QPushButton *button : { mViewLayoutPanelButton, mEditLayoutPanelButton }) {
+        QSignalBlocker block(button);
+        button->setChecked(visible);
+    }
+    syncLayoutPanel();
+    mLayoutPanel->setVisible(show);
+    layoutOverlays();
 }

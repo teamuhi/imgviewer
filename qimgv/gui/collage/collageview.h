@@ -16,6 +16,10 @@ public:
     bool isViewMode() const;
     // crop on: the plain wheel zooms the picture under the cursor instead of the whole view
     void setCropMode(bool on);
+    // rulers: canvas pixels -> viewport pixels
+    bool canvasToViewport(QTransform &out) const;
+    void setRulerMargins(int left, int top);
+    QSizeF canvasRectSize() const;
 
 public slots:
     void fitCanvas();
@@ -42,7 +46,9 @@ protected:
 private:
     CollageScene *mScene;
     bool mAutoFit = true;
-    bool mPanning = false;
+    bool mPanning = false;  // middle button held
+    bool mPanMoved = false; // ... and dragged past the click threshold
+    QPoint mPanPressPos, mPanLastPos;
     bool mViewMode = false;
     bool mCropMode = false;
     bool mGrowing = false; // guards ensurePanRoom() against the scroll changes its own resize causes

@@ -72,6 +72,8 @@ Settings *Settings::getInstance() {
     if(!settings) {
         settings = new Settings();
         settings->setupCache();
+        // before the theme: the stylesheet sizes its widgets from the application font metrics
+        applyInterfaceFont(settings->interfaceFont());
         settings->loadTheme();
     }
     return settings;
@@ -405,10 +407,14 @@ QStringList Settings::supportedMimeTypes() {
 //------------------------------------------------------------------------------
 bool Settings::videoPlayback() {
 #ifdef USE_MPV
-    return settings->settingsConf->value("videoPlayback", true).toBool();
+    return videoPlaybackEnabled();
 #else
     return false;
 #endif
+}
+
+bool Settings::videoPlaybackEnabled() {
+    return settings->settingsConf->value("videoPlayback", false).toBool();
 }
 
 void Settings::setVideoPlayback(bool mode) {
@@ -888,7 +894,151 @@ int Settings::slideshowInterval() {
     int interval = settings->settingsConf->value("slideshowInterval", 3000).toInt();
     if(interval <= 0)
         interval = 3000;
-    return interval;
+    return qBound(500, interval, 120000);
+}
+
+int Settings::slideshowTransition() {
+    return qBound(0, settings->settingsConf->value("slideshowTransition", 1).toInt(), 3);
+}
+
+void Settings::setSlideshowTransition(int style) {
+    settings->settingsConf->setValue("slideshowTransition", style);
+}
+
+bool Settings::slideshowShowName() {
+    return settings->settingsConf->value("slideshowShowName", false).toBool();
+}
+
+void Settings::setSlideshowShowName(bool mode) {
+    settings->settingsConf->setValue("slideshowShowName", mode);
+}
+
+bool Settings::slideshowShowDate() {
+    return settings->settingsConf->value("slideshowShowDate", false).toBool();
+}
+
+void Settings::setSlideshowShowDate(bool mode) {
+    settings->settingsConf->setValue("slideshowShowDate", mode);
+}
+//------------------------------------------------------------------------------
+QStringList Settings::defaultFontFamilies() {
+    return { "Consolas", "DejaVu Sans Mono", "Menlo", "Monospace" };
+}
+
+bool Settings::fontInstalled(const QString &family) {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    const QStringList families = QFontDatabase::families();
+#else
+    const QStringList families = QFontDatabase().families();
+#endif
+    for(const QString &name : families) {
+        if(name.compare(family, Qt::CaseInsensitive) == 0)
+            return true;
+    }
+    return false;
+}
+
+// Sets the application font: the chosen family, else the default family list (Consolas + monospace
+// fallbacks). The system point size is kept so the stylesheet metrics stay sane. Empty = system font.
+void Settings::applyInterfaceFont(const QString &family) {
+    static const QFont systemFont = QApplication::font(); // captured on the first (startup) call
+    QFont font = systemFont;
+    if(font.pointSizeF() <= 0) // pixel sized system font: the QSS math needs points
+        font.setPointSize(9);
+    if(!family.isEmpty()) {
+        QStringList families;
+        if(fontInstalled(family))
+            families << family;
+        for(const QString &fallback : defaultFontFamilies()) {
+            if(!families.contains(fallback, Qt::CaseInsensitive) && fontInstalled(fallback))
+                families << fallback;
+        }
+        if(!families.isEmpty()) {
+#if QT_VERSION >= QT_VERSION_CHECK(5, 13, 0)
+            font.setFamilies(families);
+#else
+            font.setFamily(families.first());
+#endif
+            if(!fontInstalled(family))
+                font.setStyleHint(QFont::Monospace);
+        }
+    }
+    QApplication::setFont(font);
+}
+
+QString Settings::interfaceFont() {
+    return settings->settingsConf->value("interfaceFont", "Consolas").toString();
+}
+
+void Settings::setInterfaceFont(const QString &family) {
+    settings->settingsConf->setValue("interfaceFont", family);
+}
+//------------------------------------------------------------------------------
+bool Settings::rulersEnabled() {
+    return settings->settingsConf->value("rulersEnabled", false).toBool();
+}
+
+void Settings::setRulersEnabled(bool mode) {
+    settings->settingsConf->setValue("rulersEnabled", mode);
+}
+
+int Settings::rulerUnit() {
+    return qBound(0, settings->settingsConf->value("rulerUnit", RULER_PX).toInt(), static_cast<int>(RULER_MIXED));
+}
+
+void Settings::setRulerUnit(int unit) {
+    settings->settingsConf->setValue("rulerUnit", qBound(0, unit, static_cast<int>(RULER_MIXED)));
+}
+
+int Settings::rulerMixedUnit() {
+    return settings->settingsConf->value("rulerMixedUnit", RULER_CM).toInt() == RULER_IN ? RULER_IN : RULER_CM;
+}
+
+void Settings::setRulerMixedUnit(int unit) {
+    settings->settingsConf->setValue("rulerMixedUnit", unit == RULER_IN ? RULER_IN : RULER_CM);
+}
+
+int Settings::rulerDpi() {
+    return qBound(30, settings->settingsConf->value("rulerDpi", 96).toInt(), 2400);
+}
+
+void Settings::setRulerDpi(int dpi) {
+    settings->settingsConf->setValue("rulerDpi", qBound(30, dpi, 2400));
+}
+
+bool Settings::rulerUseImageDpi() {
+    return settings->settingsConf->value("rulerUseImageDpi", true).toBool();
+}
+
+void Settings::setRulerUseImageDpi(bool mode) {
+    settings->settingsConf->setValue("rulerUseImageDpi", mode);
+}
+
+bool Settings::rulerSnap() {
+    return settings->settingsConf->value("rulerSnap", false).toBool();
+}
+
+void Settings::setRulerSnap(bool mode) {
+    settings->settingsConf->setValue("rulerSnap", mode);
+}
+
+int Settings::rulerSnapStep() {
+    return qBound(1, settings->settingsConf->value("rulerSnapStep", 10).toInt(), 10000);
+}
+
+void Settings::setRulerSnapStep(int step) {
+    settings->settingsConf->setValue("rulerSnapStep", qBound(1, step, 10000));
+}
+
+QStringList Settings::rulerGuides(const QString &key) {
+    return settings->stateConf->value("rulerGuides/" + key).toStringList();
+}
+
+void Settings::setRulerGuides(const QString &key, const QStringList &guides) {
+    if(guides.isEmpty())
+        settings->stateConf->remove("rulerGuides/" + key);
+    else
+        settings->stateConf->setValue("rulerGuides/" + key, guides);
 }
 //------------------------------------------------------------------------------
 int Settings::thumbnailerThreadCount() {
@@ -1211,13 +1361,78 @@ void Settings::setCollageEditLayout(int mode) {
     settings->settingsConf->setValue("collageEditLayout", mode);
 }
 
-// collage view canvas shape: index into the view bar "Canvas" combo (0 = fill the window)
-int Settings::collageViewShape() {
-    return qBound(0, settings->settingsConf->value("collageViewShape", 0).toInt(), 4);
+// collage view canvas: "window" or "<w>x<h>". Older versions stored an index into a list of shapes
+QString Settings::collageViewCanvas() {
+    QSettings *conf = settings->settingsConf;
+    if(conf->contains("collageViewShape")) {
+        static const char *legacy[] = { "window", "1920x1080", "1080x1350", "1080x1920", "1080x1080" };
+        int index = qBound(0, conf->value("collageViewShape", 0).toInt(), 4);
+        conf->remove("collageViewShape");
+        if(!conf->contains("collageViewCanvas"))
+            conf->setValue("collageViewCanvas", QString(legacy[index]));
+    }
+    return conf->value("collageViewCanvas", "window").toString();
 }
 
-void Settings::setCollageViewShape(int shape) {
-    settings->settingsConf->setValue("collageViewShape", shape);
+void Settings::setCollageViewCanvas(const QString &canvas) {
+    settings->settingsConf->setValue("collageViewCanvas", canvas);
+}
+
+bool Settings::collageViewThemeBackground() {
+    return settings->settingsConf->value("collageViewThemeBackground", true).toBool();
+}
+
+void Settings::setCollageViewThemeBackground(bool mode) {
+    settings->settingsConf->setValue("collageViewThemeBackground", mode);
+}
+
+int Settings::collageBorderWidth() {
+    return qBound(0, settings->settingsConf->value("collageBorderWidth", 0).toInt(), 64);
+}
+
+void Settings::setCollageBorderWidth(int px) {
+    settings->settingsConf->setValue("collageBorderWidth", px);
+}
+
+QColor Settings::collageBorderColor() {
+    QString name = settings->settingsConf->value("collageBorderColor", "").toString();
+    return name.isEmpty() ? QColor() : QColor(name);
+}
+
+void Settings::setCollageBorderColor(QColor color) {
+    settings->settingsConf->setValue("collageBorderColor", color.isValid() ? color.name(QColor::HexArgb) : QString());
+}
+
+int Settings::collageBorderStyle() {
+    return qBound(0, settings->settingsConf->value("collageBorderStyle", 0).toInt(), 4);
+}
+
+void Settings::setCollageBorderStyle(int style) {
+    settings->settingsConf->setValue("collageBorderStyle", style);
+}
+
+int Settings::collageBorderMode() {
+    return qBound(0, settings->settingsConf->value("collageBorderMode", 0).toInt(), 2);
+}
+
+void Settings::setCollageBorderMode(int mode) {
+    settings->settingsConf->setValue("collageBorderMode", mode);
+}
+
+bool Settings::collageConfirmExit() {
+    return settings->settingsConf->value("collageConfirmExit", true).toBool();
+}
+
+void Settings::setCollageConfirmExit(bool mode) {
+    settings->settingsConf->setValue("collageConfirmExit", mode);
+}
+
+int Settings::collagePanelWidth() {
+    return qBound(260, settings->stateConf->value("collagePanelWidth", 320).toInt(), 480);
+}
+
+void Settings::setCollagePanelWidth(int width) {
+    settings->stateConf->setValue("collagePanelWidth", width);
 }
 
 bool Settings::collageAnimate() {

@@ -13,6 +13,7 @@
 #include <QKeySequence>
 #include <QMap>
 #include <QFont>
+#include <QFontDatabase>
 #include <QFontMetrics>
 #include <QVersionNumber>
 #include <QThread>
@@ -97,6 +98,13 @@ enum FolderViewMode {
     FV_SIMPLE,
     FV_EXTENDED,
     FV_EXT_FOLDERS
+};
+
+enum RulerUnit {
+    RULER_PX = 0,
+    RULER_CM,
+    RULER_IN,
+    RULER_MIXED // pixels on the outer half of the ruler, rulerMixedUnit() on the inner half
 };
 
 enum ThumbPanelStyle {
@@ -225,6 +233,41 @@ public:
 
     void setSlideshowInterval(int ms);
     int slideshowInterval();
+    // slideshow mode: transition between slides (SlideTransitionStyle) and the caption toggles
+    int slideshowTransition();
+    void setSlideshowTransition(int style);
+    bool slideshowShowName();
+    void setSlideshowShowName(bool mode);
+    bool slideshowShowDate();
+    void setSlideshowShowDate(bool mode);
+
+    // rulers + guide lines (image viewer and collage canvas)
+    bool rulersEnabled();
+    void setRulersEnabled(bool mode);
+    int rulerUnit();               // RulerUnit
+    void setRulerUnit(int unit);
+    int rulerMixedUnit();          // RULER_CM or RULER_IN
+    void setRulerMixedUnit(int unit);
+    int rulerDpi();                // fallback for cm / in when the image has no DPI (30..2400)
+    void setRulerDpi(int dpi);
+    bool rulerUseImageDpi();
+    void setRulerUseImageDpi(bool mode);
+    // guides snap to multiples of rulerSnapStep() document pixels (1 = whole pixels, 2 = even, 5, 10, ...)
+    bool rulerSnap();
+    void setRulerSnap(bool mode);
+    int rulerSnapStep();           // 1..10000
+    void setRulerSnapStep(int step);
+    // guides of one canvas ("image" / "collage"); entries "h:123.5" / "v:40"
+    QStringList rulerGuides(const QString &key);
+    void setRulerGuides(const QString &key, const QStringList &guides);
+
+    // interface font family (empty = system default); applied at startup and from the General page
+    QString interfaceFont();
+    void setInterfaceFont(const QString &family);
+    // the default family plus fallbacks for systems without Consolas
+    static QStringList defaultFontFamilies();
+    static bool fontInstalled(const QString &family);
+    static void applyInterfaceFont(const QString &family);
 
     ImageScrolling imageScrolling();
     void setImageScrolling(ImageScrolling mode);
@@ -243,7 +286,10 @@ public:
     void setColorTid(int tid);
     void saveTheme();
 
+    // effective flag: false in builds without a video player, whatever the user picked
     bool videoPlayback();
+    // the stored choice (any build), what the settings checkbox shows
+    bool videoPlaybackEnabled();
     void setVideoPlayback(bool mode);
     bool allowMp4();
     void setAllowMp4(bool mode);
@@ -299,8 +345,26 @@ public:
     bool collageAnimate();
     int collageEditLayout();
     void setCollageEditLayout(int mode);
-    int collageViewShape();
-    void setCollageViewShape(int shape);
+    // collage view canvas: "window" (fill the window) or "<w>x<h>" in pixels
+    QString collageViewCanvas();
+    void setCollageViewCanvas(const QString &canvas);
+    // view background: theme colour + pattern (true) or the collage canvas colour (false)
+    bool collageViewThemeBackground();
+    void setCollageViewThemeBackground(bool mode);
+    // default tile outline (0 px = none), style = CollageBorderStyle
+    int collageBorderWidth();
+    void setCollageBorderWidth(int px);
+    QColor collageBorderColor(); // invalid = theme border colour
+    void setCollageBorderColor(QColor color);
+    int collageBorderStyle();
+    void setCollageBorderStyle(int style);
+    // dragging the border between tiles: 0 = snap, 1 = free, 2 = locked
+    int collageBorderMode();
+    void setCollageBorderMode(int mode);
+    bool collageConfirmExit();
+    void setCollageConfirmExit(bool mode);
+    int collagePanelWidth();
+    void setCollagePanelWidth(int width);
     void setCollageAnimate(bool mode);
     void setJxlAnimation(bool mode);
     bool absoluteZoomStep();

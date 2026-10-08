@@ -63,6 +63,23 @@ ViewerWidget::ViewerWidget(QWidget *parent)
 
     connect(settings, &Settings::settingsChanged, this, &ViewerWidget::readSettings);
     readSettings();
+
+    // after readSettings() / the connection above: the controller's viewport filter has to sit in front of ours
+    RulerHost host;
+    host.view = imageViewer.get();
+    ImageViewerV2 *viewer = imageViewer.get();
+    host.docToViewport = [viewer](QTransform &t) { return viewer->imageToViewport(t); };
+    host.setMargins = [viewer](int left, int top) { viewer->setRulerMargins(left, top); };
+    host.docSize = [viewer]() { return QSizeF(viewer->sourceSize()); };
+    rulers = new RulerController(host, "image", this);
+}
+
+void ViewerWidget::setImageDpi(qreal dpi) {
+    rulers->setImageDpi(dpi);
+}
+
+void ViewerWidget::setRulersSuppressed(bool suppressed) {
+    rulers->setSuppressed(suppressed);
 }
 
 QRect ViewerWidget::imageRect() {
@@ -452,6 +469,11 @@ QRect ViewerWidget::videoControlsArea() {
 // cause they won't propagate to the ImageViewer, only to overlay's container (this widget)
 // so we just grab them before they reach ImageViewer and do the needful
 bool ViewerWidget::eventFilter(QObject *object, QEvent *event) {
+    // the viewport is inset by the rulers: bring event positions into this widget's coordinates
+    auto toLocal = [this, object](const QPoint &p) {
+        auto *w = qobject_cast<QWidget*>(object);
+        return w ? w->mapTo(this, p) : p;
+    };
     // catch press and doubleclick
     // force doubleclick to act as press event for click zones
     if(event->type() == QEvent::MouseButtonPress || event->type() == QEvent::MouseButtonDblClick) {
@@ -464,14 +486,14 @@ bool ViewerWidget::eventFilter(QObject *object, QEvent *event) {
             clickZoneOverlay->disableHighlight();
             return false;
         }
-        if(clickZoneOverlay->leftZone().contains(mouseEvent->pos())) {
+        if(clickZoneOverlay->leftZone().contains(toLocal(mouseEvent->pos()))) {
             clickZoneOverlay->setPressed(true);
             clickZoneOverlay->highlightLeft();
             imageViewer.get()->disableDrags();
             actionManager->invokeAction("prevImage");
             return true; // do not pass the event to imageViewer
         }
-        if(clickZoneOverlay->rightZone().contains(mouseEvent->pos())) {
+        if(clickZoneOverlay->rightZone().contains(toLocal(mouseEvent->pos()))) {
             clickZoneOverlay->setPressed(true);
             clickZoneOverlay->highlightRight();
             imageViewer.get()->disableDrags();
@@ -495,12 +517,12 @@ bool ViewerWidget::eventFilter(QObject *object, QEvent *event) {
         QPoint mousePos;
         if(event->type() == QEvent::MouseMove) {
             auto mouseEvent = dynamic_cast<QMouseEvent*>(event);
-            mousePos = mouseEvent->pos();
+            mousePos = toLocal(mouseEvent->pos());
             if(mouseEvent->buttons())
                 return false;
         } else {
             auto enterEvent = dynamic_cast<QEnterEvent*>(event);
-            mousePos = enterEvent->pos();
+            mousePos = toLocal(enterEvent->pos());
         }
         if(clickZoneOverlay->leftZone().contains(mousePos)) {
             clickZoneOverlay->setPressed(false);

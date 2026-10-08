@@ -80,7 +80,7 @@ bool CollageItem::isFreePlacement() const { return mFree; }
 qreal CollageItem::viewAspect() const { return mViewAspect; }
 void CollageItem::setViewAspect(qreal aspect) { mViewAspect = qMax<qreal>(0.0, aspect); }
 qreal CollageItem::viewWeight() const { return mViewWeight; }
-void CollageItem::setViewWeight(qreal weight) { mViewWeight = qBound<qreal>(0.5, weight, 3.0); }
+void CollageItem::setViewWeight(qreal weight) { mViewWeight = qBound<qreal>(0.2, weight, 5.0); }
 qreal CollageItem::layoutAspect() const { return mViewAspect > 0.0 ? mViewAspect : aspect(); }
 
 quint64 CollageItem::id() const { return mId; }
@@ -102,6 +102,8 @@ void CollageItem::setFrameSize(const QSizeF &size) {
         return;
     prepareGeometryChange();
     mFrame = clamped;
+    mClipDirty = true;
+    setTransformOriginPoint(frameRect().center()); // layout rotation turns around the centre
     update();
 }
 
@@ -140,7 +142,51 @@ qreal CollageItem::cornerRadius() const { return mRadius; }
 
 void CollageItem::setCornerRadius(qreal radius) {
     mRadius = qMax<qreal>(0.0, radius);
+    mClipDirty = true;
     update();
+}
+
+void CollageItem::setShapeSpec(const CollageShape::Spec &spec) {
+    if(spec == mShape)
+        return;
+    prepareGeometryChange(); // shape() follows the clip
+    mShape = spec;
+    mClipDirty = true;
+    update();
+}
+
+CollageShape::Spec CollageItem::shapeSpec() const { return mShape; }
+
+QPainterPath CollageItem::clipPath() const {
+    if(mClipDirty) {
+        mClipCache = CollageShape::path(frameRect(), mShape, mRadius);
+        mClipDirty = false;
+    }
+    return mClipCache;
+}
+
+void CollageItem::setBorder(int width, const QColor &color, int style) {
+    mBorderWidth = qBound(0, width, 400);
+    mBorderColor = color;
+    mBorderStyle = style;
+    update();
+}
+
+int CollageItem::borderWidth() const { return mBorderWidth; }
+QColor CollageItem::borderColor() const { return mBorderColor; }
+int CollageItem::borderStyle() const { return mBorderStyle; }
+bool CollageItem::hasBorderOverride() const { return mBorderOverride; }
+void CollageItem::setBorderOverride(bool custom) { mBorderOverride = custom; }
+
+QColor CollageItem::effectiveBorderColor() const {
+    return mBorderColor.isValid() ? mBorderColor : settings->colorScheme().widget_border;
+}
+
+void CollageItem::setLayoutRotation(qreal degrees) {
+    if(qFuzzyCompare(1.0 + rotation(), 1.0 + degrees))
+        return;
+    setTransformOriginPoint(frameRect().center());
+    setRotation(degrees);
 }
 
 CollageRes CollageItem::resolution() const { return mRes; }
@@ -369,7 +415,11 @@ QRectF CollageItem::boundingRect() const {
 
 QPainterPath CollageItem::shape() const {
     QPainterPath path;
-    path.addRect(frameRect());
+    // clicks outside a polygon / circle tile fall through to whatever is below
+    if(mShape.shape != 0)
+        path = clipPath();
+    else
+        path.addRect(frameRect());
     if(handlesActive()) {
         for(int h = H_TL; h <= H_L; h++)
             path.addRect(handleRect(static_cast<Handle>(h)));
@@ -416,16 +466,15 @@ void CollageItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *optio
 
     if(!mPixmap.isNull() && mOriginal.isValid()) {
         painter->save();
-        if(mRadius > 0) {
-            QPainterPath clip;
-            clip.addRoundedRect(frame, mRadius, mRadius);
-            painter->setClipPath(clip, Qt::IntersectClip);
-        }
+        if(mRadius > 0 || mShape.shape != 0)
+            painter->setClipPath(clipPath(), Qt::IntersectClip);
         CollageMapping m = mapping();
         QRectF src(m.source.left() * mPixmap.width(),  m.source.top() * mPixmap.height(),
                    m.source.width() * mPixmap.width(), m.source.height() * mPixmap.height());
         painter->drawPixmap(m.target, mPixmap, src);
         painter->restore();
+        if(mBorderWidth > 0)
+            CollageShape::paintBorder(painter, clipPath(), mBorderWidth, effectiveBorderColor(), mBorderStyle);
     } else {
         painter->fillRect(frame, QColor(128, 128, 128, 70));
         QFont font = painter->font();
@@ -457,7 +506,10 @@ void CollageItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *optio
         pen.setCosmetic(true);
         painter->setPen(pen);
         painter->setBrush(Qt::NoBrush);
-        painter->drawRect(frame);
+        if(mShape.shape != 0)
+            painter->drawPath(clipPath());
+        else
+            painter->drawRect(frame);
 
         QPen handlePen(accent, 1);
         handlePen.setCosmetic(true);

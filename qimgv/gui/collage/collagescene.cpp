@@ -32,6 +32,11 @@ CollageScene::CollageScene(QObject *parent) : QGraphicsScene(parent) {
     refreshPattern();
     updateSceneRect();
     connect(this, &CollageScene::itemEdited, this, &CollageScene::storeFreeRects);
+
+    mBorderWidth = settings->collageBorderWidth();
+    mBorderColor = settings->collageBorderColor();
+    mBorderStyle = settings->collageBorderStyle();
+    mThemeBackground = settings->collageViewThemeBackground();
 }
 
 CollageMode CollageScene::mode() const { return mMode; }
@@ -75,9 +80,9 @@ void CollageScene::setCanvasColor(const QColor &color) {
 
 void CollageScene::updateSceneRect() {
     if(mMode == CollageMode::View) {
-        // the view area is the whole world: panning a zoomed collage stays inside it.
-        // Freehand has room around it so the canvas can be moved freely
-        setSceneRect(isFreeView() ? freeWorldRect() : viewAreaRect());
+        // room around the view area in every layout, so the collage can be moved freely (middle-drag);
+        // CollageView grows it further on demand
+        setSceneRect(freeWorldRect());
         return;
     }
     // room around the canvas so items can be parked outside of it
@@ -137,8 +142,13 @@ void CollageScene::setMode(CollageMode newMode) {
             item->restoreState(states.value(item->id()));
     }
     updateSceneRect();
-    if(view || mStatic)
+    if(view || mStatic) {
         relayoutView();
+    } else {
+        resetCellStyle();
+        mSeparators.clear();
+        syncSeparators();
+    }
     update();
     emit collageChanged();
 }
@@ -157,6 +167,9 @@ void CollageScene::setStaticCanvas(bool enabled) {
     if(enabled) {
         relayoutView();
     } else {
+        resetCellStyle(); // hand-placed frames: plain, upright, no border handles
+        mSeparators.clear();
+        syncSeparators();
         update();
         emit collageChanged();
     }
@@ -179,13 +192,128 @@ void CollageScene::relayoutStatic() {
     QList<qreal> aspects;
     for(CollageItem *item : list)
         aspects.append(item->aspect());
-    const QList<QRectF> rects = CollageLayout::compute(mStaticLayout, aspects, canvasRect(), mStaticGap);
-    for(int i = 0; i < list.size() && i < rects.size(); i++) {
-        list.at(i)->setPos(rects.at(i).topLeft());
-        list.at(i)->setFrameSize(rects.at(i).size());
+    CollageLayout::Result result = CollageLayout::computeEx(mStaticLayout, aspects, canvasRect(), mStaticGap,
+                                                            QList<qreal>(), mLayoutOptions);
+    applyLayoutResult(list, mStaticLayout, result);
+}
+
+// positions + frames, then the cell style (shape / rotation of Grid / Row / Column) and the border handles
+void CollageScene::applyLayoutResult(const QList<CollageItem*> &list, CollageLayout::Mode mode,
+                                     const CollageLayout::Result &result) {
+    bool styled = CollageLayout::usesCellOptions(mode);
+    for(int i = 0; i < list.size() && i < result.cells.size(); i++) {
+        CollageItem *item = list.at(i);
+        item->setPos(result.cells.at(i).topLeft());
+        item->setFrameSize(result.cells.at(i).size());
+        CollageShape::Spec spec;
+        if(styled) {
+            spec.shape = mLayoutOptions.shape;
+            spec.sides = mLayoutOptions.polygonSides;
+            spec.star = mLayoutOptions.star;
+            spec.starDepth = mLayoutOptions.starDepth;
+            spec.index = i;
+        }
+        item->setShapeSpec(spec);
+        item->setLayoutRotation(styled ? mLayoutOptions.rotation : 0.0);
     }
+    mSeparators = result.separators;
+    syncSeparators();
     update();
     emit collageChanged();
+}
+
+void CollageScene::resetCellStyle() {
+    for(CollageItem *item : mById) {
+        item->setShapeSpec(CollageShape::Spec());
+        item->setLayoutRotation(0.0);
+    }
+}
+
+CollageLayout::Mode CollageScene::activeLayout() const {
+    if(mMode == CollageMode::View)
+        return mViewLayout;
+    return mStatic ? mStaticLayout : CollageLayout::MODE_FREEFORM;
+}
+
+const CollageLayout::Options &CollageScene::layoutOptions() const {
+    return mLayoutOptions;
+}
+
+void CollageScene::setLayoutOptions(const CollageLayout::Options &options) {
+    mLayoutOptions = options;
+    relayoutView();
+}
+
+void CollageScene::clearSplits() {
+    mLayoutOptions.splits.clear();
+}
+
+// the tile's own size (W / H in the panel) wins over dragged borders around it
+void CollageScene::clearSplitsFor(CollageItem *item) {
+    int index = item ? mViewOrder.indexOf(item->id()) : -1;
+    if(index < 0)
+        return;
+    for(auto it = mLayoutOptions.splits.begin(); it != mLayoutOptions.splits.end();) {
+        const QString key = it.key();
+        bool lineInner = key.size() > 1 && (key.at(0) == QChar('r') || key.at(0) == QChar('c')) && key.at(1).isDigit();
+        if(CollageLayout::mosaicKeyContains(key, index) || lineInner)
+            it = mLayoutOptions.splits.erase(it);
+        else
+            ++it;
+    }
+}
+
+void CollageScene::refreshSeparators() {
+    syncSeparators();
+}
+
+// one handle per border of the automatic layout; reused between re-flows (one may be in the middle of a drag)
+void CollageScene::syncSeparators() {
+    bool show = settings->collageBorderMode() != 2 && activeLayout() != CollageLayout::MODE_FREEFORM && imageCount() > 1;
+    int needed = show ? mSeparators.size() : 0;
+    qreal gap = (mMode == CollageMode::View) ? mViewGap : mStaticGap;
+    qreal hit = gap + 10.0 / mViewScale; // the gap plus ~10 screen px
+    while(mSeparatorItems.size() < needed) {
+        CollageSeparator *separator = new CollageSeparator();
+        QGraphicsScene::addItem(separator);
+        connect(separator, &CollageSeparator::moved, this, &CollageScene::onSeparatorMoved);
+        connect(separator, &CollageSeparator::resetRequested, this, &CollageScene::onSeparatorReset);
+        mSeparatorItems.append(separator);
+    }
+    for(int i = 0; i < mSeparatorItems.size(); i++) {
+        CollageSeparator *separator = mSeparatorItems.at(i);
+        if(i < needed) {
+            separator->setSeparator(mSeparators.at(i), hit);
+            separator->setVisible(true);
+        } else {
+            separator->setVisible(false);
+        }
+    }
+}
+
+void CollageScene::onSeparatorMoved(const QString &key, qreal fraction) {
+    mLayoutOptions.splits.insert(key, fraction);
+    relayoutView();
+}
+
+void CollageScene::onSeparatorReset(const QString &key) {
+    mLayoutOptions.splits.remove(key);
+    relayoutView();
+}
+
+void CollageScene::setDefaultBorder(int width, const QColor &color, int style) {
+    mBorderWidth = width;
+    mBorderColor = color;
+    mBorderStyle = style;
+    for(CollageItem *item : mById) {
+        if(!item->hasBorderOverride())
+            item->setBorder(width, color, style);
+    }
+}
+
+void CollageScene::setThemeBackground(bool theme) {
+    mThemeBackground = theme;
+    update();
 }
 
 void CollageScene::setViewArea(const QSizeF &size, qreal dpr) {
@@ -269,13 +397,8 @@ void CollageScene::relayoutView() {
         aspects.append(item->layoutAspect());
         weights.append(item->viewWeight());
     }
-    const QList<QRectF> rects = CollageLayout::compute(mViewLayout, aspects, canvasRect(), mViewGap, weights);
-    for(int i = 0; i < list.size() && i < rects.size(); i++) {
-        list.at(i)->setPos(rects.at(i).topLeft());
-        list.at(i)->setFrameSize(rects.at(i).size());
-    }
-    update();
-    emit collageChanged();
+    CollageLayout::Result result = CollageLayout::computeEx(mViewLayout, aspects, canvasRect(), mViewGap, weights, mLayoutOptions);
+    applyLayoutResult(list, mViewLayout, result);
 }
 
 //------------------------------------------------------------------------------
@@ -316,6 +439,9 @@ void CollageScene::placeNewFreeTile(CollageItem *item) {
 void CollageScene::relayoutFree() {
     qreal w = mViewArea.width(), h = mViewArea.height();
     qreal unit = qMin(w, h);
+    resetCellStyle();
+    mSeparators.clear();
+    syncSeparators();
     for(CollageItem *item : viewOrderItems()) {
         if(!mFreeRects.contains(item->id()))
             placeNewFreeTile(item);
@@ -344,7 +470,7 @@ QRectF CollageScene::freeWorldRect() const {
 
 // keeps the scene a full window larger than the visible part on every side, so panning never hits an edge
 void CollageScene::growSceneRect(const QRectF &visible) {
-    if(!isFreeView() || visible.isEmpty())
+    if(visible.isEmpty())
         return;
     qreal w = visible.width(), h = visible.height();
     if(sceneRect().contains(visible.adjusted(-w, -h, w, h)))
@@ -426,6 +552,8 @@ CollageItem *CollageScene::addImage(const QString &path, bool cascade) {
         item->setPos(40 + step, 40 + step);
     item->setZValue(++mTopZ);
     item->setHandleSize(handleSize());
+    item->setBorder(mBorderWidth, mBorderColor, mBorderStyle);
+    clearSplits(); // a new tile changes the structure the dragged borders were made for
     item->setAnimationsAllowed(mAnimEnabled && mAnimActive);
     // the arrangement of the mode we are *not* in starts from the default frame
     CollageItem::State otherState = item->saveState();
@@ -485,6 +613,7 @@ void CollageScene::removeCollageItem(CollageItem *item) {
     forget(item->id());
     removeItem(item);
     delete item;
+    clearSplits();
     if(mMode == CollageMode::View || mStatic)
         relayoutView();
     else
@@ -500,6 +629,7 @@ void CollageScene::removeSelected() {
         removeItem(item);
         delete item;
     }
+    clearSplits();
     if(mMode == CollageMode::View || mStatic)
         relayoutView();
     else
@@ -518,6 +648,9 @@ void CollageScene::clearCollage() {
     mFreeCascade = 0;
     mFreeRects.clear();
     mEditorInitialized = false;
+    clearSplits();
+    mSeparators.clear();
+    syncSeparators();
     emit collageChanged();
 }
 
@@ -630,6 +763,7 @@ void CollageScene::setViewScale(qreal scale) {
     mViewScale = qBound<qreal>(0.001, scale, 100.0);
     for(CollageItem *item : mById)
         item->setHandleSize(handleSize());
+    syncSeparators(); // the grab area is a few screen px wide
     update();
 }
 
@@ -677,6 +811,24 @@ QPointF CollageScene::snapPosition(const CollageItem *item, const QPointF &pos) 
 
 //------------------------------------------------------------------------------
 void CollageScene::drawBackground(QPainter *painter, const QRectF &rect) {
+    if(mMode == CollageMode::View && !mThemeBackground) {
+        // the collage canvas colour: everywhere when the canvas is the window, inside the frame otherwise
+        auto fillCanvas = [this, painter](const QRectF &area) {
+            if(mCanvasColor.alpha() < 255) {
+                QBrush checker(mChecker);
+                checker.setTransform(QTransform::fromScale(1.0 / mViewScale, 1.0 / mViewScale));
+                painter->fillRect(area, checker);
+            }
+            painter->fillRect(area, mCanvasColor);
+        };
+        if(!hasViewShape()) {
+            fillCanvas(rect);
+            return;
+        }
+        painter->fillRect(rect, settings->colorScheme().background);
+        fillCanvas(canvasRect().intersected(rect));
+        return;
+    }
     if(mMode == CollageMode::View) {
         // like the image viewer: theme background + pattern that stays put while zooming / panning
         painter->fillRect(rect, settings->colorScheme().background);
@@ -747,14 +899,24 @@ void CollageScene::drawItem(QPainter *painter, CollageItem *item) const {
 
     QRectF source(m.source.left() * image.width(),  m.source.top() * image.height(),
                   m.source.width() * image.width(), m.source.height() * image.height());
+    // same as on screen: frame-local coordinates, layout rotation around the centre, shape clip, outline
     painter->save();
-    painter->setOpacity(item->opacity());
-    if(item->cornerRadius() > 0) {
-        QPainterPath clip;
-        clip.addRoundedRect(frame, item->cornerRadius(), item->cornerRadius());
-        painter->setClipPath(clip, Qt::IntersectClip);
+    painter->translate(frame.topLeft());
+    if(!qFuzzyIsNull(item->rotation())) {
+        QPointF center(frame.width() / 2.0, frame.height() / 2.0);
+        painter->translate(center);
+        painter->rotate(item->rotation());
+        painter->translate(-center);
     }
-    painter->drawImage(m.target.translated(frame.topLeft()), image, source);
+    painter->setOpacity(item->opacity());
+    QPainterPath clip = item->clipPath();
+    painter->save();
+    if(item->cornerRadius() > 0 || item->shapeSpec().shape != 0)
+        painter->setClipPath(clip, Qt::IntersectClip);
+    painter->drawImage(m.target, image, source);
+    painter->restore();
+    if(item->borderWidth() > 0)
+        CollageShape::paintBorder(painter, clip, item->borderWidth(), item->effectiveBorderColor(), item->borderStyle());
     painter->restore();
 }
 

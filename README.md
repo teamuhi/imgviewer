@@ -1,6 +1,6 @@
 ## :exclamation: Updates may be slow due to war in Ukraine :sunflower: :sunflower: :sunflower:
 
-qimgv | Current version: 1.0.2
+qimgv | Current version: 1.0.5
 =====
 Image viewer. Fast, easy to use. Optional video support.
 
@@ -48,6 +48,7 @@ Main window & panel        |  Folder view   |  Settings window
 | Fit mode: window | 1 |
 | Fit mode: width | 2 |
 | Fit mode: 1:1 (no scaling) | 3 |
+| Fit mode: window (stretch) | 4 |
 | Switch fit modes  | Space |
 | Toggle fullscreen mode  | DoubleClick / F / F11 |
 | Exit fullscreen mode | Esc (never quits the app) |
@@ -56,15 +57,29 @@ Main window & panel        |  Folder view   |  Settings window
 | Resize image  | R |
 | Rotate left  | Ctrl+L |
 | Rotate Right  | Ctrl+R |
+| Flip horizontal / vertical | H / V |
 | Open containing directory | Ctrl+D |
-| Slideshow mode | ~ |
-| Shuffle mode | Ctrl+~ |
+| Slideshow mode | Slideshow button in the top bar / context menu (no default key, bind `toggleSlideshow` in Settings > Controls) |
+| Toggle rulers / guides | Ctrl+Shift+R (Settings > View > Rulers & guides; drag from a ruler to add a guide, drag a guide back onto a ruler to remove it, right-click a ruler for units) |
+| Ruler settings (add a guide at an exact px / % / cm / in, snap to multiples of 2 / 5 / 10 ...) | Double-click a ruler |
+| Shuffle mode | Ctrl+\` |
 | Quick copy  | C |
 | Quick move  | M |
 | Move to trash | Delete |
 | Delete file  | Shift+Delete |
 | Save  | Ctrl+S |
 | Save As  | Ctrl+Shift+S |
+| Discard edits | Ctrl+Z |
+| Rename | F2 |
+| Reload image | F5 |
+| Copy file / copy path / paste file | Ctrl+C / Ctrl+Shift+C / Ctrl+V |
+| Set as wallpaper | Ctrl+W |
+| Next / previous folder | Shift+Right / Shift+Left |
+| Toggle fullscreen info bar | Shift+F |
+| Zoom (keys) / scroll | + - = (also with Ctrl) / Up Down |
+| Video: seek / frame step | Ctrl+Left / Ctrl+Right, `,` `.` |
+| Mouse side buttons | previous / next image |
+| Context menu | Right click / Menu key |
 | Folder view | Enter / Backspace |
 | Open | Ctrl+O |
 | Collage view | Ctrl+G |
@@ -83,6 +98,21 @@ Note: you can configure every shortcut by going to __Settings > Controls__
 - __Settings > View > Performance > Show CPU / RAM usage in the top bar__ (on by default) adds the CPU and memory usage of qimgv itself, updated every second. Hidden on narrow windows. In fullscreen the same readout shows in the top right corner together with the fullscreen info bar.
 - The bar can be turned off in __Settings > General > Top bar__ (it is always hidden in fullscreen).
 
+### Slideshow
+
+Start it with the Slideshow button in the top bar (or the context menu). The top bar, panels and info bars are hidden; moving the mouse shows the slideshow bar (previous / pause / next, timer, transition None / Fade / Slide / Zoom, loop, show file name / date, Exit). The same options are in __Settings > General > Slideshow__. Editing actions (delete, crop, rename...) are blocked while it runs.
+
+| Action (slideshow) | Shortcut |
+| ------------- | ------------- |
+| Pause / resume | Space |
+| Previous / next slide | Left / Right |
+| Leave the slideshow | Esc (in fullscreen: leaves fullscreen first) |
+| Fullscreen | F / F11 |
+
+### Interface font
+
+__Settings > General > Interface font__ (default Consolas, falls back to another monospace font when Consolas is not installed). Applied right away.
+
 ### Collage
 
 Open several images at once with __Ctrl+G__ (or the collage button in the top bar): select 2+ images in folder view first, or pick files in the dialog.
@@ -91,12 +121,16 @@ Only a few shortcuts work while the collage is open (open, settings, fullscreen,
 | Action (collage view) | Shortcut |
 | ------------- | ------------- |
 | Zoom the whole collage | MouseWheel |
-| Pan the whole collage (Freehand: endless canvas, pans at any zoom) | Drag empty space / MiddleMouse drag |
+| Move the whole collage freely (any layout, also when starting on a tile) | Hold MiddleMouse + move |
+| Fit the collage back into the window | MiddleMouse click / Ctrl+0 |
+| Pan the whole collage | Drag empty space |
+| Resize two neighbouring tiles (Mosaic / Grid / Row / Column) | Drag the border between them (Snap mode locks to 1/4, 1/3, 1/2, 2/3, 3/4; Alt = free; double-click = reset) |
+| Change a number field (W / H, gap, canvas, border...) | Drag it sideways (Shift = x10, Alt = finer), or click and type |
 | Move the picture inside its tile | Drag the tile (Alt+drag also works) |
 | Zoom the picture inside its tile | Shift+MouseWheel over the tile |
 | Swap two tiles | Ctrl+drag a tile onto another |
 | Open a tile in the normal viewer | DoubleClick / Enter (the top bar Back button, Backspace or Esc returns to the collage) |
-| Back (editor -> collage view -> image viewer) | Esc (when no tile is selected) |
+| Back (editor -> collage view -> image viewer) | Esc (when no tile is selected); leaving the collage view asks first, the collage stays in memory (Ctrl+G resumes it) |
 | Tile settings (aspect, size, crop, resolution) | Right click a tile |
 | Select previous / next tile | Left / Right arrow (Freehand layout: nudge the tile, Shift = 10 px) |
 | Place tiles yourself | Layout -> Freehand: drag a tile, drag the handles to resize (Shift keeps proportions), Alt+drag moves the picture, Page Up / Page Down = front / back, Ctrl+0 = back to the centre |
@@ -104,14 +138,19 @@ Only a few shortcuts work while the collage is open (open, settings, fullscreen,
 | Remove tile | Delete |
 | Switch to editor / back to view | E |
 | Show the toolbar (it slides in, and slides out again after a moment) | Move the cursor to the top edge |
-| Frame shape (Window, 16:9, 4:5, mobile 9:16, square) | "Canvas" dropdown in the toolbar (not used by Freehand) |
+| Canvas (Window, pixel presets like 1920 x 1080 / 1080 x 1920, Custom W x H, shared with the editor) | "Canvas" dropdown in the bar (not used by Freehand) |
+| Background colour (or the theme background) / tile outline (width, colour, style) | "Background" + "Theme" / "Border" in the bar |
+| Grid / Row / Column options (columns, rows, cell size, rotation, style: tiles, circle, hexagon, polygon / star) | "Layout options" in the bar |
+| Exit the collage | "Exit" (first button of the bar) |
 | Crop in Freehand (drag pans the picture, wheel zooms it, handles off) | "Crop" toggle in the toolbar |
 
 | Action (collage editor) | Shortcut |
 | ------------- | ------------- |
 | Move / resize a frame | Drag / drag the handles (Shift keeps proportions, Ctrl disables snapping) |
 | Show the toolbar (it slides in, and slides out again after a moment) | Move the cursor to the top edge |
-| Pick how frames are arranged (Mosaic is the default) | "Layout" dropdown: Mosaic / Grid / Row / Column arrange automatically (drag pans the picture, Ctrl+drag swaps frames), Freehand = place frames yourself |
+| Pick how frames are arranged (Mosaic is the default) | "Layout" dropdown: Mosaic / Grid / Row / Column arrange automatically (drag pans the picture, Ctrl+drag swaps frames, drag a border to resize), Freehand = place frames yourself |
+| Move the canvas freely / fit it back | Hold MiddleMouse + move / MiddleMouse click |
+| Outline of every frame, Grid / Row / Column options | "Border" / "Layout options" in the toolbar (exported too) |
 | Pan the picture inside a frame (Freehand) | "Crop" toggle in the toolbar (drag pans, wheel zooms, handles off) or Alt+drag |
 | Canvas size, incl. portrait / mobile presets (3:4, 9:16, 20:9, iPhone) | "Canvas" dropdown or W / H in the toolbar |
 | Zoom the picture inside a frame | Shift+MouseWheel |
@@ -186,24 +225,17 @@ qimgv can open some extra formats via third-party image plugins. All of them are
 # Installation
 
 ## Windows
-  
-  Windows builds are portable (everything is contained within the install folder). The installer also sets up file associations.
-  
-  _NOTE: `-video` variants include mpv for video support_
-  
-  Grab the latest version from the [releases page](https://github.com/easymodo/qimgv/releases)
 
-  Alternatively you can install it with Chocolatey:
-  
-  ```
-  choco install qimgv
-  ```
-  
-  Or WinGet:
-  
-  ```
-  winget install --id easymodo.qimgv
-  ```
+  Download `qimgv-setup-<version>-x64.exe` from the [releases page](https://github.com/teamuhi/imgviewer/releases) and run it. The installer:
+  - installs to `Program Files\qimgv` (or per-user, via the "only for me" choice), upgrades in place and uninstalls cleanly (your settings in `%AppData%` are kept);
+  - adds Start menu / optional desktop shortcuts;
+  - optionally registers qimgv for image files (jpg, png, gif, webp, bmp, tiff, tga, ico, svg, ...).
+
+  Prefer no install? Download `imgviewer-win64_<version>.zip` instead: it is portable (everything is contained within the folder).
+
+  _The installer is unsigned, so Windows SmartScreen may warn: click __More info > Run anyway__._
+
+  _Making qimgv the default viewer:_ Windows does not let an installer do that silently. Open __Settings > Apps > Default apps__, search for qimgv and pick it for the formats you want (or right-click an image > Open with > Choose another app > Always).
 
 ## GNU+Linux
 

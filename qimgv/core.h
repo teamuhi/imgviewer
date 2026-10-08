@@ -60,6 +60,7 @@ private:
 
     State state;
     bool loopSlideshow, slideshow, shuffle;
+    bool slideshowPaused = false;
     bool returnToCollage = false; // current image was opened from the collage view
     void setReturnToCollage(bool enabled);
     void closeFullScreenOrBack();
@@ -170,6 +171,9 @@ private slots:
     void enableFolderView();
     void toggleFolderView();
     void toggleSlideshow();
+    void toggleRulers();
+    void toggleSlideshowPause();
+    void slideshowStep(int direction);
     void onPlaybackFinished();
     void setFoldersDisplay(bool mode);
     void loadParentDir();

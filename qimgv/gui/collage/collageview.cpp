@@ -46,6 +46,22 @@ void CollageView::setCropMode(bool on) {
     mCropMode = on;
 }
 
+bool CollageView::canvasToViewport(QTransform &out) const {
+    QRectF canvas = mScene->canvasRect();
+    if(canvas.isEmpty())
+        return false;
+    out = QTransform::fromTranslate(canvas.left(), canvas.top()) * viewportTransform();
+    return true;
+}
+
+QSizeF CollageView::canvasRectSize() const {
+    return mScene->canvasRect().size();
+}
+
+void CollageView::setRulerMargins(int left, int top) {
+    setViewportMargins(left, top, 0, 0);
+}
+
 // view mode: dragging empty space pans the (zoomed) collage, edit mode: rubber band selection
 void CollageView::applyDragMode() {
     setDragMode(mViewMode ? QGraphicsView::ScrollHandDrag : QGraphicsView::RubberBandDrag);
@@ -80,9 +96,9 @@ void CollageView::viewScaleChanged() {
     mScene->setViewScale(transform().m11());
 }
 
-// Freehand: keep the scene bigger than what is on screen so the canvas can be dragged anywhere, at any zoom
+// keep the scene bigger than what is on screen so the canvas can be dragged anywhere, at any zoom
 void CollageView::ensurePanRoom() {
-    if(mGrowing || !mViewMode || !mScene->isFreeView())
+    if(mGrowing)
         return;
     mGrowing = true;
     QPoint centerPx = viewport()->rect().center();
@@ -188,14 +204,15 @@ void CollageView::wheelEvent(QWheelEvent *event) {
     event->accept();
 }
 
-// middle button pans: re-dispatch it as a left-drag in hand-drag mode
+// Holding the middle button moves the whole canvas, in every layout and mode. It never reaches the
+// scene, so starting on a tile pans the canvas too (not the picture inside the tile).
+// A middle click without a drag fits the collage back into the window.
 void CollageView::mousePressEvent(QMouseEvent *event) {
     if(event->button() == Qt::MiddleButton) {
         mPanning = true;
-        mAutoFit = false;
-        setDragMode(QGraphicsView::ScrollHandDrag);
-        QMouseEvent press(QEvent::MouseButtonPress, QPointF(event->pos()), Qt::LeftButton, Qt::LeftButton, event->modifiers());
-        QGraphicsView::mousePressEvent(&press);
+        mPanMoved = false;
+        mPanPressPos = mPanLastPos = event->pos();
+        viewport()->setCursor(Qt::ClosedHandCursor);
         event->accept();
         return;
     }
@@ -205,8 +222,19 @@ void CollageView::mousePressEvent(QMouseEvent *event) {
 
 void CollageView::mouseMoveEvent(QMouseEvent *event) {
     if(mPanning) {
-        QMouseEvent move(QEvent::MouseMove, QPointF(event->pos()), Qt::NoButton, Qt::LeftButton, event->modifiers());
-        QGraphicsView::mouseMoveEvent(&move);
+        QPoint pos = event->pos();
+        if(!mPanMoved && (pos - mPanPressPos).manhattanLength() < 3) {
+            event->accept();
+            return;
+        }
+        if(!mPanMoved) {
+            mPanMoved = true;
+            mAutoFit = false; // from now on a resize keeps the position instead of re-fitting
+        }
+        QPoint delta = pos - mPanLastPos;
+        mPanLastPos = pos;
+        horizontalScrollBar()->setValue(horizontalScrollBar()->value() - delta.x());
+        verticalScrollBar()->setValue(verticalScrollBar()->value() - delta.y());
         event->accept();
         return;
     }
@@ -219,10 +247,10 @@ void CollageView::mouseMoveEvent(QMouseEvent *event) {
 
 void CollageView::mouseReleaseEvent(QMouseEvent *event) {
     if(mPanning && event->button() == Qt::MiddleButton) {
-        QMouseEvent release(QEvent::MouseButtonRelease, QPointF(event->pos()), Qt::LeftButton, Qt::NoButton, event->modifiers());
-        QGraphicsView::mouseReleaseEvent(&release);
-        applyDragMode();
         mPanning = false;
+        viewport()->unsetCursor();
+        if(!mPanMoved)
+            fitCanvas(); // plain middle click: back to the whole collage
         event->accept();
         return;
     }

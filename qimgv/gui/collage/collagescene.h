@@ -8,6 +8,7 @@
 #include "gui/collage/collageitem.h"
 #include "gui/collage/collagelayout.h"
 #include "gui/collage/collageimageloader.h"
+#include "gui/collage/collageseparator.h"
 
 enum class CollageMode {
     View, // tiles fill the viewer area and re-flow with it, dragging swaps tiles
@@ -35,6 +36,7 @@ public:
     QPointF clampToView(const CollageItem *item, const QPointF &pos) const;
     // Freehand is an endless canvas: the view area plus generous room on every side, grown further while panning
     QRectF freeWorldRect() const;
+    // every layout can be panned freely (middle-drag): the scene rect grows with the visible part
     void growSceneRect(const QRectF &visible);
     void setViewGap(int gap);
     int viewGap() const;
@@ -46,6 +48,20 @@ public:
     QList<CollageItem*> viewOrderItems() const;
     void swapTiles(quint64 a, quint64 b);
     void selectNeighbor(int delta);
+
+    // Grid / Row / Column options + dragged borders, shared by the view and the editor's automatic layouts
+    const CollageLayout::Options &layoutOptions() const;
+    void setLayoutOptions(const CollageLayout::Options &options);
+    // the automatic layout that is on screen, or MODE_FREEFORM when the tiles are placed by hand
+    CollageLayout::Mode activeLayout() const;
+    // drag handles of the borders follow the "Borders" setting (snap / free / locked)
+    void refreshSeparators();
+    // a tile's own size was set: its dragged borders would fight it, drop them
+    void clearSplitsFor(CollageItem *item);
+    // default outline of the tiles that have none of their own
+    void setDefaultBorder(int width, const QColor &color, int style);
+    // view background: theme colour + pattern, or the canvas colour
+    void setThemeBackground(bool theme);
 
     // editor: frames follow an automatic layout instead of being placed by hand
     bool staticCanvas() const;
@@ -105,6 +121,8 @@ protected:
 private slots:
     void onLoaded(quint64 id, int generation, QImage image, QSize originalSize, bool animated);
     void onSwapRequested(CollageItem *item, const QPointF &scenePos);
+    void onSeparatorMoved(const QString &key, qreal fraction);
+    void onSeparatorReset(const QString &key);
     void storeFreeRects(); // remembers where the user put the selected tiles (Freehand)
 
 private:
@@ -140,6 +158,18 @@ private:
     int mStaticGap = 12;
     QHash<quint64, FreeRect> mFreeRects;
     int mFreeCascade = 0;
+    CollageLayout::Options mLayoutOptions;
+    QList<CollageLayout::Separator> mSeparators;   // of the last automatic layout
+    QList<CollageSeparator*> mSeparatorItems;     // pooled: a dragged one must survive the re-flows it causes
+    int mBorderWidth = 0;
+    QColor mBorderColor;
+    int mBorderStyle = 0;
+    bool mThemeBackground = true;
+
+    void applyLayoutResult(const QList<CollageItem*> &list, CollageLayout::Mode mode, const CollageLayout::Result &result);
+    void resetCellStyle();
+    void syncSeparators();
+    void clearSplits();
 
     void storeFreeRect(const CollageItem *item);
     void seedFreeRects();

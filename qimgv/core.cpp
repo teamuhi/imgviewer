@@ -116,6 +116,10 @@ void Core::connectComponents() {
     connect(mw, &MW::draggedOut,            this, qOverload<>(&Core::onDraggedOut));
 
     connect(mw, &MW::playbackFinished, this, &Core::onPlaybackFinished);
+    connect(mw, &MW::slideshowPauseRequested, this, &Core::toggleSlideshowPause);
+    connect(mw, &MW::slideshowStepRequested,  this, &Core::slideshowStep);
+    connect(mw, &MW::slideshowExitRequested,  this, &Core::stopSlideshow);
+    connect(mw, &MW::slideshowOptionsChanged, this, &Core::readSettings);
 
     connect(mw, &MW::scalingRequested, this, &Core::scalingRequest);
     connect(model->scaler, &Scaler::scalingFinished, this, &Core::onScalingFinished);
@@ -198,6 +202,7 @@ void Core::initActions() {
     connect(actionManager, &ActionManager::volumeUp, mw, &MW::volumeUp);
     connect(actionManager, &ActionManager::volumeDown, mw, &MW::volumeDown);
     connect(actionManager, &ActionManager::toggleSlideshow, this, &Core::toggleSlideshow);
+    connect(actionManager, &ActionManager::toggleRulers, this, &Core::toggleRulers);
     connect(actionManager, &ActionManager::goUp, this, &Core::loadParentDir);
     connect(actionManager, &ActionManager::discardEdits, this, &Core::discardEdits);
     connect(actionManager, &ActionManager::nextDirectory, this, &Core::nextDirectory);
@@ -280,38 +285,91 @@ void Core::toggleShuffle() {
     updateInfoString();
 }
 
+void Core::toggleRulers() {
+    bool enable = !settings->rulersEnabled();
+    settings->setRulersEnabled(enable);
+    settings->sendChangeNotification();
+    mw->showMessage(enable ? tr("Rulers: ON") : tr("Rulers: OFF"));
+}
+
 void Core::toggleSlideshow() {
-    if(slideshow) {
+    if(slideshow)
         stopSlideshow();
-        mw->showMessage(tr("Slideshow: OFF"));
-
-    } else {
+    else
         startSlideshow();
-        mw->showMessage(tr("Slideshow: ON"));
-    }
 }
 
+// slideshow mode: from the image viewer, or from the folder view (starts at the selected image)
 void Core::startSlideshow() {
-    if(!slideshow) {
-        slideshow = true;
-        mw->setLoopPlayback(false);
-        enableDocumentView();
-        startSlideshowTimer();
-        updateInfoString();
+    if(slideshow || mw->currentViewMode() == MODE_COLLAGE)
+        return;
+    if(!model || model->isEmpty()) {
+        mw->showMessage(tr("No images to show"));
+        return;
     }
+    if(mw->currentViewMode() == MODE_FOLDERVIEW)
+        enableDocumentView();
+    if(state.currentFilePath.isEmpty() || !model->containsFile(state.currentFilePath))
+        loadFileIndex(0, false, settings->usePreloader());
+    slideshow = true;
+    slideshowPaused = false;
+    mw->setLoopPlayback(false);
+    mw->setSlideshowMode(true);
+    startSlideshowTimer();
+    updateInfoString();
 }
 
+// idempotent: every navigation that leaves the image viewer ends the show
 void Core::stopSlideshow() {
-    if(slideshow) {
-        slideshow = false;
-        mw->setLoopPlayback(true);
+    if(!slideshow)
+        return;
+    slideshow = false;
+    slideshowPaused = false;
+    mw->setLoopPlayback(true);
+    slideshowTimer.stop();
+    mw->setSlideshowMode(false);
+    updateInfoString();
+}
+
+void Core::toggleSlideshowPause() {
+    if(!slideshow)
+        return;
+    slideshowPaused = !slideshowPaused;
+    if(slideshowPaused)
         slideshowTimer.stop();
-        updateInfoString();
+    else
+        startSlideshowTimer();
+    mw->setSlideshowPaused(slideshowPaused);
+    mw->showMessage(slideshowPaused ? tr("Slideshow paused") : tr("Slideshow resumed"), 900);
+}
+
+// manual previous / next inside the slideshow: keeps the show running, restarts the timer
+void Core::slideshowStep(int direction) {
+    if(!slideshow || model->isEmpty())
+        return;
+    int newIndex;
+    if(shuffle) {
+        newIndex = direction > 0 ? randomizer.next() : randomizer.prev();
+    } else {
+        newIndex = model->indexOfFile(state.currentFilePath) + (direction > 0 ? 1 : -1);
+        if(newIndex >= model->fileCount() || newIndex < 0) {
+            if(!loopSlideshow) {
+                direction > 0 ? mw->showMessageDirectoryEnd() : mw->showMessageDirectoryStart();
+                return;
+            }
+            newIndex = direction > 0 ? 0 : model->fileCount() - 1;
+        }
     }
+    slideshowTimer.stop();
+    mw->prepareSlideTransition(direction);
+    loadFileIndex(newIndex, false, true);
+    mw->startSlideTransition(); // in case the image failed to load: never leave the old slide covering it
+    if(!slideshowPaused)
+        startSlideshowTimer();
 }
 
 void Core::onPlaybackFinished() {
-    if(slideshow) {
+    if(slideshow && !slideshowPaused) {
         nextImageSlideshow();
     }
 }
@@ -444,7 +502,8 @@ void Core::enableFolderView() {
 void Core::enableDocumentView() {
     if(mw->currentViewMode() == MODE_DOCUMENT)
         return;
-    mw->enableDocumentView();
+    if(!mw->enableDocumentView()) // the user chose to stay in the collage
+        return;
     if(model && model->fileCount() && state.currentFilePath == "") {
         auto selected = folderViewPresenter.selectedPaths().first();
         // if it is a directory - ignore and just open the first file
@@ -1417,9 +1476,12 @@ void Core::prevDirectory() {
 }
 
 void Core::nextImage() {
+    if(slideshow) {
+        slideshowStep(1);
+        return;
+    }
     if(mw->currentViewMode() == MODE_FOLDERVIEW || (model->isEmpty() && folderEndAction != FOLDER_END_GOTO_ADJACENT))
         return;
-    stopSlideshow();
     if(shuffle) {
         loadFileIndex(randomizer.next(), true, false);
         return;
@@ -1441,9 +1503,12 @@ void Core::nextImage() {
 }
 
 void Core::prevImage() {
+    if(slideshow) {
+        slideshowStep(-1);
+        return;
+    }
     if(mw->currentViewMode() == MODE_FOLDERVIEW || (model->isEmpty() && folderEndAction != FOLDER_END_GOTO_ADJACENT))
         return;
-    stopSlideshow();
     if(shuffle) {
         loadFileIndex(randomizer.prev(), true, false);
         return;
@@ -1466,10 +1531,12 @@ void Core::prevImage() {
 }
 
 void Core::nextImageSlideshow() {
-    if(model->isEmpty() || mw->currentViewMode() == MODE_FOLDERVIEW)
+    if(!slideshow || slideshowPaused || model->isEmpty() || mw->currentViewMode() == MODE_FOLDERVIEW)
         return;
     if(shuffle) {
+        mw->prepareSlideTransition(1);
         loadFileIndex(randomizer.next(), false, false);
+        mw->startSlideTransition();
     } else {
         int newIndex = model->indexOfFile(state.currentFilePath) + 1;
         if(newIndex >= model->fileCount()) {
@@ -1481,7 +1548,9 @@ void Core::nextImageSlideshow() {
                 return;
             }
         }
+        mw->prepareSlideTransition(1);
         loadFileIndex(newIndex, false, true);
+        mw->startSlideTransition();
     }
     startSlideshowTimer();
 }
@@ -1490,6 +1559,10 @@ void Core::startSlideshowTimer() {
     // start timer only for static images or single frame gifs
     // for proper gifs and video we get a playbackFinished() signal
     auto img = model->getImage(state.currentFilePath);
+    if(!img) { // failed to load: move on after the usual time
+        slideshowTimer.start();
+        return;
+    }
     if(img->type() == STATIC) {
         slideshowTimer.start();
     } else if(img->type() == ANIMATED) {
@@ -1564,7 +1637,15 @@ void Core::guiSetImage(std::shared_ptr<Image> img) {
         return;
     }
     DocumentType type = img->type();
+    qreal dpi = 0.0;
     if(type == STATIC) {
+        // QImage reports 96 dpi (3780 dots/m) when the file carries no resolution: treat that as unknown
+        std::shared_ptr<const QImage> data = img->getImage();
+        if(data) {
+            int dpm = data->dotsPerMeterX();
+            if(dpm > 0 && dpm != 3780 && dpm != 3779)
+                dpi = dpm * 0.0254;
+        }
         mw->showImage(img->getPixmap());
     } else if(type == ANIMATED) {
         auto animated = dynamic_cast<ImageAnimated *>(img.get());
@@ -1576,6 +1657,7 @@ void Core::guiSetImage(std::shared_ptr<Image> img) {
         showGui();
         mw->showVideo(video->filePath());
     }
+    mw->setImageDpi(dpi);
     img->isEdited() ? mw->showSaveOverlay() : mw->hideSaveOverlay();
     mw->setExifInfo(img->getExifTags());
 }

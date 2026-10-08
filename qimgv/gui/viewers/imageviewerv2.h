@@ -54,6 +54,11 @@ public:
 
     QSize scaledSizeR() const;
 
+    // rulers: source image pixels -> viewport pixels (false = no image)
+    bool imageToViewport(QTransform &out) const;
+    // room for the rulers around the image area
+    void setRulerMargins(int left, int top);
+
     void pauseResume();
     void enableDrags();
     void disableDrags();

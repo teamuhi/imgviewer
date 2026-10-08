@@ -44,7 +44,7 @@ std::shared_ptr<ViewerWidget> DocumentWidget::viewWidget() {
 }
 
 void DocumentWidget::readSettings() {
-    setPanelEnabled(settings->panelEnabled());
+    setPanelEnabled(settings->panelEnabled() && !mPanelSuppressed);
     mPanelFullscreenOnly = settings->panelFullscreenOnly();
     setPanelPinned(settings->panelPinned());
     mainPanel->readSettings();
@@ -106,6 +106,20 @@ void DocumentWidget::setPanelEnabled(bool mode) {
         mainPanel->hide();
     else
         setupMainPanel();
+}
+
+void DocumentWidget::setPanelSuppressed(bool mode) {
+    if(mPanelSuppressed == mode)
+        return;
+    mPanelSuppressed = mode;
+    if(mode) {
+        // a pinned panel takes layout space: unpin it for the show, restore afterwards
+        if(mPanelPinned)
+            setPanelPinned(false);
+        setPanelEnabled(false);
+    } else {
+        readSettings();
+    }
 }
 
 bool DocumentWidget::panelEnabled() {

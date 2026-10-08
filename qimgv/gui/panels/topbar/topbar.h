@@ -32,6 +32,7 @@ public slots:
     void setBackVisible(bool visible);
     // back button returns to the collage (image opened from it) instead of the image viewer
     void setBackToCollage(bool toCollage);
+    void setSlideshowAllowed(bool allowed);
     // magnification of the shown image (1.0 = 100%); <= 0 hides the counter
     void setZoom(qreal scale);
     // the counter only makes sense in the image viewer
@@ -52,7 +53,7 @@ private slots:
 private:
     QHBoxLayout layout;
     QLabel indexLabel, nameLabel, infoLabel, zoomLabel, perfLabel;
-    ActionButton *backButton, *openButton, *collageButton, *folderViewButton, *settingsButton;
+    ActionButton *backButton, *openButton, *collageButton, *slideshowButton, *folderViewButton, *settingsButton;
     // settings categories: full row of text buttons, or one dropdown when the bar gets narrow
     QWidget menuRow;
     QHBoxLayout menuRowLayout;

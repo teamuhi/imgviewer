@@ -68,6 +68,8 @@
         <file>res/icons/common/menuitem/open16@2x.png</file>
         <file>res/icons/common/menuitem/resize16.png</file>
         <file>res/icons/common/menuitem/resize16@2x.png</file>
+        <file>res/icons/common/menuitem/ruler16.png</file>
+        <file>res/icons/common/menuitem/ruler16@2x.png</file>
         <file>res/icons/common/menuitem/rotate-left16.png</file>
         <file>res/icons/common/menuitem/rotate-left16@2x.png</file>
         <file>res/icons/common/menuitem/rotate-right16.png</file>
@@ -185,6 +187,14 @@
         <file>res/icons/common/menuitem/folderview16_accent@2x.png</file>
         <file>res/icons/common/menuitem/collage16_accent.png</file>
         <file>res/icons/common/menuitem/collage16_accent@2x.png</file>
+        <file>res/icons/common/buttons/panel/slideshow20.png</file>
+        <file>res/icons/common/buttons/panel/slideshow20@2x.png</file>
+        <file>res/icons/common/buttons/panel/slideshow20_accent.png</file>
+        <file>res/icons/common/buttons/panel/slideshow20_accent@2x.png</file>
+        <file>res/icons/common/menuitem/slideshow16.png</file>
+        <file>res/icons/common/menuitem/slideshow16@2x.png</file>
+        <file>res/icons/common/menuitem/slideshow16_accent.png</file>
+        <file>res/icons/common/menuitem/slideshow16_accent@2x.png</file>
         <file>res/icons/common/menuitem/export16.png</file>
         <file>res/icons/common/menuitem/export16@2x.png</file>
         <file>res/icons/common/menuitem/export16_accent.png</file>

@@ -38,6 +38,17 @@ jobs:
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DUSE_QT5=OFF -DVIDEO_SUPPORT=OFF
           cmake --build build
 
+      - name: Version
+        id: ver
+        run: |
+          VERSION=$(sed -nE '/^project\(/,/\)/ s/^[[:space:]]*VERSION[[:space:]]+([0-9][0-9.]*).*//p' CMakeLists.txt | head -n1)
+          [ -n "$VERSION" ] || { echo "::error::VERSION not found in CMakeLists.txt"; exit 1; }
+          if [[ "$GITHUB_REF" == refs/tags/* ]] && [ "${GITHUB_REF_NAME#v}" != "$VERSION" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match CMake VERSION $VERSION"
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
       - name: Package
         id: pkg
         run: |
@@ -45,15 +56,41 @@ jobs:
           scripts/package-win-release.sh build "$NAME"
           zip -r -q "$NAME.zip" "$NAME"
           echo "file=$NAME.zip" >> "$GITHUB_OUTPUT"
+          echo "dir=$(cygpath -w "$PWD/$NAME")" >> "$GITHUB_OUTPUT"
+
+      # pwsh, not msys2: MSYS would rewrite the /D... arguments passed to ISCC
+      - name: Installer
+        id: setup
+        shell: pwsh
+        run: |
+          $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup -y --no-progress
+            if ($LASTEXITCODE -ne 0) { throw 'Inno Setup install failed' }
+          }
+          $ver = '${{ steps.ver.outputs.version }}'
+          $out = Join-Path $env:GITHUB_WORKSPACE 'dist'
+          & $iscc "/DAppVersion=$ver" "/DSourceDir=${{ steps.pkg.outputs.dir }}" "/DOutputDir=$out" scripts\qimgv-setup.iss
+          if ($LASTEXITCODE -ne 0) { throw 'ISCC failed' }
+          $setup = Join-Path $out "qimgv-setup-$ver-x64.exe"
+          if (-not (Test-Path $setup)) { throw "Missing $setup" }
+          "file=dist/qimgv-setup-$ver-x64.exe" >> $env:GITHUB_OUTPUT
 
       - uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
-          files: ${{ steps.pkg.outputs.file }}
+          files: |
+            ${{ steps.setup.outputs.file }}
+            ${{ steps.pkg.outputs.file }}
           generate_release_notes: true
+          body: |
+            **Install:** download `qimgv-setup-<version>-x64.exe` and run it. Download the `.zip` instead for a portable copy.
+            The installer is unsigned, so Windows SmartScreen may warn: click *More info* > *Run anyway*.
 
       - uses: actions/upload-artifact@v4
         if: ${{ !startsWith(github.ref, 'refs/tags/') }}
         with:
           name: imgviewer-win64
-          path: ${{ steps.pkg.outputs.file }}
+          path: |
+            ${{ steps.setup.outputs.file }}
+            ${{ steps.pkg.outputs.file }}

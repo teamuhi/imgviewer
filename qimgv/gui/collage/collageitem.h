@@ -6,6 +6,9 @@
 #include <QSize>
 #include <QSizeF>
 #include <QString>
+#include <QColor>
+#include <QPainterPath>
+#include "gui/collage/collageshape.h"
 
 class QMovie;
 
@@ -85,6 +88,20 @@ public:
     void resetCrop();
     qreal cornerRadius() const;
     void setCornerRadius(qreal radius);
+    // clip shape from the Grid / Row / Column style (plain rect + corner radius otherwise)
+    void setShapeSpec(const CollageShape::Spec &spec);
+    CollageShape::Spec shapeSpec() const;
+    QPainterPath clipPath() const; // frame coordinates
+    // tile outline: the collage default unless the tile has its own (override)
+    void setBorder(int width, const QColor &color, int style);
+    int borderWidth() const;
+    QColor borderColor() const; // invalid = theme border colour
+    int borderStyle() const;
+    bool hasBorderOverride() const;
+    void setBorderOverride(bool custom);
+    QColor effectiveBorderColor() const;
+    // rotation applied by the automatic layouts, around the frame centre
+    void setLayoutRotation(qreal degrees);
     CollageRes resolution() const;
     void setResolution(CollageRes res);
     bool cropMode() const;
@@ -152,6 +169,13 @@ private:
     qreal mZoom = 1.0;
     QPointF mCenter = QPointF(0.5, 0.5);
     qreal mRadius = 0.0;
+    CollageShape::Spec mShape;
+    mutable QPainterPath mClipCache;
+    mutable bool mClipDirty = true;
+    int mBorderWidth = 0;
+    QColor mBorderColor;
+    int mBorderStyle = 0;
+    bool mBorderOverride = false;
     CollageRes mRes = CollageRes::Auto;
     bool mCropMode = false;
     bool mViewMode = false;

@@ -40,6 +40,9 @@
 #include "gui/folderview/folderviewproxy.h"
 #include "gui/panels/infobar/infobarproxy.h"
 #include "gui/panels/topbar/topbar.h"
+#include "gui/overlays/slideshowbar.h"
+#include "gui/overlays/slideshowcaption.h"
+#include "gui/overlays/slidetransition.h"
 
 #ifdef USE_KDE_BLUR
 #include <KWindowEffects>
@@ -73,6 +76,8 @@ public:
     void onScalingFinished(std::unique_ptr<QPixmap>scaled);
     void showImage(std::unique_ptr<QPixmap> pixmap);
     void showAnimation(std::shared_ptr<QMovie> movie);
+    // rulers: DPI stored in the shown image (0 = none)
+    void setImageDpi(qreal dpi);
     void showVideo(QString file);
 
     void setCurrentInfo(int fileIndex, int fileCount, QString filePath, QString fileName, QSize imageSize, qint64 fileSize, bool slideshow, bool shuffle, bool edited);
@@ -88,6 +93,17 @@ public:
     QStringList pickCollageImages(const QString &directory);
     // asks before the program closes while a collage is open. true = ok to proceed
     bool confirmDiscardCollage();
+
+    // asks before leaving the collage view (keeps the collage in memory). true = ok to leave
+    bool confirmExitCollage();
+
+    // slideshow mode: hides the chrome, shows the slideshow bar / caption, restricts the actions
+    void setSlideshowMode(bool enabled);
+    bool isSlideshowMode() const;
+    void setSlideshowPaused(bool paused);
+    // snapshot of the current slide, animated away once the next one is shown (direction: +1 / -1)
+    void prepareSlideTransition(int direction);
+    void startSlideTransition();
 
     bool showConfirmation(QString title, QString msg);
     DialogResult fileReplaceDialog(QString source, QString target, FileReplaceMode mode, bool multiple);
@@ -128,6 +144,17 @@ private:
     CurrentInfo info;
     bool collageDiscardConfirmed = false;
     bool collageConnected = false;
+
+    bool slideshowMode = false;
+    SlideshowBar *slideshowBar = nullptr;
+    SlideshowCaption *slideshowCaption = nullptr;
+    SlideTransition *slideTransition = nullptr;
+    QTimer slideshowIdleTimer; // hides the bar and the cursor when the mouse rests
+    bool slideshowCursorHidden = false;
+    void ensureSlideshowWidgets();
+    void placeSlideshowCaption(); // above the bar when the two would overlap
+    void slideshowActivity();
+    void slideshowIdle();
 #if QT_VERSION < QT_VERSION_CHECK(5, 14, 0)
     QDesktopWidget desktopWidget;
 #endif
@@ -167,6 +194,7 @@ protected:
     void dropEvent(QDropEvent *event);
     void resizeEvent(QResizeEvent *event);
 
+    bool eventFilter(QObject *watched, QEvent *event) override;
     void mousePressEvent(QMouseEvent *event);
     void keyPressEvent(QKeyEvent *event);
     void wheelEvent(QWheelEvent *event);
@@ -192,6 +220,12 @@ signals:
     void saveAsRequested(QString);
     void sortingSelected(SortingMode);
     void collageImageOpened(const QString &path); // a tile was opened from the collage
+
+    // slideshow bar / slideshow keys
+    void slideshowPauseRequested();
+    void slideshowStepRequested(int direction);
+    void slideshowExitRequested();
+    void slideshowOptionsChanged();
 
     // viewerWidget
     void scalingRequested(QSize, ScalingFilter);
@@ -224,8 +258,8 @@ public slots:
     void showCropPanel();
     void hideCropPanel();
     void toggleFolderView();
-    void enableFolderView();
-    void enableDocumentView();
+    bool enableFolderView();
+    bool enableDocumentView();
     void showOpenDialog(QString path);
     void showSaveDialog(QString filePath);
     QString getSaveFileName(QString fileName);

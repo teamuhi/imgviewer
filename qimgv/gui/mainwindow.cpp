@@ -86,8 +86,12 @@ void MW::setupUi() {
     centralWidget.reset(new CentralWidget(docWidget, folderView, this));
     layout.addWidget(centralWidget.get());
     // the collage view only accepts a few navigation actions, everything else targets the document
-    connect(centralWidget.get(), &CentralWidget::viewModeChanged, this, [](ViewMode mode) {
-        actionManager->setRestricted(mode == MODE_COLLAGE);
+    connect(centralWidget.get(), &CentralWidget::viewModeChanged, this, [this](ViewMode mode) {
+        if(mode == MODE_COLLAGE)
+            actionManager->setRestriction(ActionManager::Restriction::Collage);
+        else
+            actionManager->setRestriction(slideshowMode ? ActionManager::Restriction::Slideshow
+                                                        : ActionManager::Restriction::None);
     });
     controlsOverlay = new ControlsOverlay(docWidget.get());
     infoBarFullscreen = new FullscreenInfoOverlayProxy(viewerWidget.get());
@@ -162,6 +166,8 @@ void MW::setupRenameOverlay() {
 }
 
 void MW::toggleFolderView() {
+    if(!confirmExitCollage())
+        return;
     hideCropPanel();
     if(copyOverlay)
         copyOverlay->hide();
@@ -173,7 +179,9 @@ void MW::toggleFolderView() {
     onInfoUpdated();
 }
 
-void MW::enableFolderView() {
+bool MW::enableFolderView() {
+    if(!confirmExitCollage())
+        return false;
     hideCropPanel();
     if(copyOverlay)
         copyOverlay->hide();
@@ -183,11 +191,39 @@ void MW::enableFolderView() {
     imageInfoOverlay->hide();
     centralWidget->showFolderView();
     onInfoUpdated();
+    return true;
 }
 
-void MW::enableDocumentView() {
+bool MW::enableDocumentView() {
+    if(!confirmExitCollage())
+        return false;
     centralWidget->showDocumentView();
     onInfoUpdated();
+    return true;
+}
+
+// every way out of the collage view (Exit button, top bar back, Esc, Backspace / Enter, folder button)
+// comes through here. The collage itself is kept: Ctrl+G resumes it.
+bool MW::confirmExitCollage() {
+    if(centralWidget->currentViewMode() != MODE_COLLAGE || !hasCollage() || !settings->collageConfirmExit())
+        return true;
+    CollageWidget *collage = centralWidget->collageWidget();
+    if(collage && collage->isEditMode())
+        return true; // the editor goes back to the collage view first, that is not an exit
+    QMessageBox box(this);
+    box.setWindowTitle(tr("Exit collage"));
+    box.setText(tr("Leave the collage view and return to the image viewer?"));
+    box.setInformativeText(tr("Your collage stays in memory - press Ctrl+G to resume it."));
+    box.setIcon(QMessageBox::Question);
+    box.setStandardButtons(QMessageBox::Yes | QMessageBox::No);
+    box.setDefaultButton(QMessageBox::Yes);
+    QCheckBox *dontAsk = new QCheckBox(tr("Don't ask again"), &box);
+    box.setCheckBox(dontAsk);
+    if(box.exec() != QMessageBox::Yes)
+        return false;
+    if(dontAsk->isChecked())
+        settings->setCollageConfirmExit(false);
+    return true;
 }
 
 ViewMode MW::currentViewMode() {
@@ -313,6 +349,11 @@ void MW::showImage(std::unique_ptr<QPixmap> pixmap) {
         preShowResize(pixmap->size());
     viewerWidget->showImage(std::move(pixmap));
     updateCropPanelData();
+    startSlideTransition();
+}
+
+void MW::setImageDpi(qreal dpi) {
+    viewerWidget->setImageDpi(dpi);
 }
 
 void MW::showAnimation(std::shared_ptr<QMovie> movie) {
@@ -320,12 +361,14 @@ void MW::showAnimation(std::shared_ptr<QMovie> movie) {
         preShowResize(movie->frameRect().size());
     viewerWidget->showAnimation(movie);
     updateCropPanelData();
+    startSlideTransition();
 }
 
 void MW::showVideo(QString file) {
     if(settings->autoResizeWindow())
         preShowResize(QSize()); // tmp. find a way to get this though mpv BEFORE playback
     viewerWidget->showVideo(file);
+    startSlideTransition();
 }
 
 void MW::showContextMenu() {
@@ -514,6 +557,28 @@ bool MW::event(QEvent *event) {
 // hook up to actionManager
 void MW::keyPressEvent(QKeyEvent *event) {
     event->accept();
+    // slideshow mode keys are fixed (like the collage keys), everything else goes through the actions
+    if(slideshowMode && event->modifiers() == Qt::NoModifier) {
+        switch(event->key()) {
+        case Qt::Key_Space:
+            emit slideshowPauseRequested();
+            return;
+        case Qt::Key_Left:
+            emit slideshowStepRequested(-1);
+            return;
+        case Qt::Key_Right:
+            emit slideshowStepRequested(1);
+            return;
+        case Qt::Key_Escape:
+            if(isFullScreen())
+                showWindowed();
+            else
+                emit slideshowExitRequested();
+            return;
+        default:
+            break;
+        }
+    }
     actionManager->processEvent(event);
 }
 
@@ -564,8 +629,8 @@ void MW::closeEvent(QCloseEvent *event) {
         event->ignore();
         return;
     }
-    // closing the window is deliberate: bypass the collage action lock
-    actionManager->setRestricted(false);
+    // closing the window is deliberate: bypass the collage / slideshow action lock
+    actionManager->setRestriction(ActionManager::Restriction::None);
     event->accept();
     actionManager->invokeAction("exit");
 }
@@ -581,6 +646,8 @@ void MW::dropEvent(QDropEvent *event) {
 }
 
 void MW::resizeEvent(QResizeEvent *event) {
+    if(slideshowMode)
+        placeSlideshowCaption();
     if(activeSidePanel == SIDEPANEL_CROP) {
         cropOverlay->setImageScale(viewerWidget->currentScale());
         cropOverlay->setImageDrawRect(viewerWidget->imageRect());
@@ -851,6 +918,143 @@ void MW::setReturnToCollage(bool enabled) {
     onInfoUpdated();
 }
 
+//------------------------------------------------------------------------------
+// slideshow mode
+void MW::ensureSlideshowWidgets() {
+    if(slideshowBar)
+        return;
+    slideshowBar = new SlideshowBar(viewerWidget.get());
+    slideshowCaption = new SlideshowCaption(viewerWidget.get());
+    slideTransition = new SlideTransition(viewerWidget.get());
+    connect(slideshowBar, &SlideshowBar::prevRequested,  this, [this]() { emit slideshowStepRequested(-1); });
+    connect(slideshowBar, &SlideshowBar::nextRequested,  this, [this]() { emit slideshowStepRequested(1); });
+    connect(slideshowBar, &SlideshowBar::pauseRequested, this, &MW::slideshowPauseRequested);
+    connect(slideshowBar, &SlideshowBar::exitRequested,  this, &MW::slideshowExitRequested);
+    connect(slideshowBar, &SlideshowBar::optionsChanged, this, [this]() {
+        slideshowCaption->refresh();
+        placeSlideshowCaption();
+        emit slideshowOptionsChanged();
+    });
+    slideshowIdleTimer.setSingleShot(true);
+    slideshowIdleTimer.setInterval(2000);
+    connect(&slideshowIdleTimer, &QTimer::timeout, this, &MW::slideshowIdle);
+}
+
+void MW::placeSlideshowCaption() {
+    if(!slideshowCaption || !slideshowBar)
+        return;
+    const int margin = 16;
+    int barLeft = (viewerWidget->width() - slideshowBar->sizeHint().width()) / 2;
+    bool overlap = margin + slideshowCaption->sizeHint().width() + 8 > barLeft;
+    slideshowCaption->setVerticalMargin(overlap ? slideshowBar->verticalMargin() + slideshowBar->sizeHint().height() + 10 : margin);
+}
+
+bool MW::isSlideshowMode() const {
+    return slideshowMode;
+}
+
+void MW::setSlideshowMode(bool enabled) {
+    if(slideshowMode == enabled)
+        return;
+    slideshowMode = enabled;
+    ensureSlideshowWidgets();
+    if(enabled) {
+        hideCropPanel();
+        if(copyOverlay)
+            copyOverlay->hide();
+        if(renameOverlay)
+            renameOverlay->hide();
+        imageInfoOverlay->hide();
+        docWidget->setPanelSuppressed(true);
+        viewerWidget->setRulersSuppressed(true);
+        actionManager->setRestriction(ActionManager::Restriction::Slideshow);
+        setSlideshowPaused(false);
+        qApp->installEventFilter(this); // mouse movement anywhere reveals the bar
+        slideshowCaption->setFile(info.filePath);
+        placeSlideshowCaption();
+        slideshowActivity();
+    } else {
+        qApp->removeEventFilter(this);
+        slideshowIdleTimer.stop();
+        if(slideshowCursorHidden) {
+            QApplication::restoreOverrideCursor();
+            slideshowCursorHidden = false;
+        }
+        slideTransition->finish();
+        slideshowBar->hide();
+        slideshowCaption->hide();
+        docWidget->setPanelSuppressed(false);
+        viewerWidget->setRulersSuppressed(false);
+        actionManager->setRestriction(currentViewMode() == MODE_COLLAGE ? ActionManager::Restriction::Collage
+                                                                        : ActionManager::Restriction::None);
+    }
+    adaptToWindowState();
+    onInfoUpdated();
+}
+
+void MW::setSlideshowPaused(bool paused) {
+    if(slideshowBar)
+        slideshowBar->setPaused(paused);
+}
+
+// mouse moved: bar + cursor back, hide them again after a moment of rest
+void MW::slideshowActivity() {
+    if(slideshowCursorHidden) {
+        QApplication::restoreOverrideCursor();
+        slideshowCursorHidden = false;
+    }
+    slideshowBar->show();
+    slideshowIdleTimer.start();
+}
+
+void MW::slideshowIdle() {
+    if(!slideshowMode)
+        return;
+    // keep the bar while it is being used (hover, open combo popup, typing the timer)
+    QWidget *focus = QApplication::focusWidget();
+    if(slideshowBar->underMouse() || QApplication::activePopupWidget() || QApplication::activeModalWidget()
+       || (focus && slideshowBar->isAncestorOf(focus))) {
+        slideshowIdleTimer.start();
+        return;
+    }
+    slideshowBar->hide();
+    if(!slideshowCursorHidden && isActiveWindow()) {
+        QApplication::setOverrideCursor(Qt::BlankCursor);
+        slideshowCursorHidden = true;
+    }
+}
+
+bool MW::eventFilter(QObject *watched, QEvent *event) {
+    if(slideshowMode && event->type() == QEvent::MouseMove)
+        slideshowActivity();
+    return FloatingWidgetContainer::eventFilter(watched, event);
+}
+
+void MW::prepareSlideTransition(int direction) {
+    if(!slideshowMode || currentViewMode() != MODE_DOCUMENT || !viewerWidget->isDisplaying())
+        return;
+    int style = settings->slideshowTransition();
+    if(style == TRANSITION_NONE)
+        return;
+    // the bar / caption are not part of the picture that leaves
+    bool barVisible = slideshowBar->isVisible(), captionVisible = slideshowCaption->isVisible();
+    slideshowBar->setVisible(false);
+    slideshowCaption->setVisible(false);
+    QPixmap snapshot = viewerWidget->grab();
+    slideshowBar->setVisible(barVisible);
+    slideshowCaption->setVisible(captionVisible);
+    slideTransition->arm(snapshot, style, direction);
+    slideshowBar->raise();
+    slideshowCaption->raise();
+}
+
+void MW::startSlideTransition() {
+    if(!slideTransition || !slideTransition->isArmed())
+        return;
+    // never longer than half a slide
+    slideTransition->start(qMin(400, settings->slideshowInterval() / 2));
+}
+
 // Esc inside the collage: editor -> collage view -> image viewer
 void MW::collageBack() {
     CollageWidget *collage = centralWidget->collageWidget();
@@ -897,6 +1101,7 @@ void MW::onInfoUpdated() {
     topBar->setBackToCollage(backToCollage);
     topBar->setBackVisible(backToCollage || viewMode != MODE_DOCUMENT);
     topBar->setZoomAllowed(viewMode == MODE_DOCUMENT);
+    topBar->setSlideshowAllowed(viewMode != MODE_COLLAGE);
 
     QString windowTitle;
     if(centralWidget->currentViewMode() == MODE_COLLAGE) {
@@ -966,6 +1171,10 @@ void MW::onInfoUpdated() {
         topBar->setInfo(posString, info.fileName + (info.edited ? "  *" : ""), resString + "  " + sizeString + " " + states);
     }
     setWindowTitle(windowTitle);
+    if(slideshowMode && slideshowCaption) {
+        slideshowCaption->setFile(info.filePath);
+        placeSlideshowCaption();
+    }
 }
 
 // TODO!!! buffer this in mw
@@ -1099,6 +1308,12 @@ void MW::adaptToWindowState() {
         else
             infoBarWindowed->hide();
 
+        controlsOverlay->hide();
+    }
+    if(slideshowMode) { // nothing but the picture (+ slideshow bar / caption)
+        topBar->hide();
+        infoBarWindowed->hide();
+        infoBarFullscreen->hide();
         controlsOverlay->hide();
     }
     folderView->onFullscreenModeChanged(isFullScreen());

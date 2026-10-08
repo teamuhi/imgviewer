@@ -38,14 +38,16 @@ public:
     QString keyForNativeScancode(quint32 scanCode);
     void adjustFromVersion(QVersionNumber lastVer);
     void saveShortcuts();
-    // while restricted (collage view) only a few navigation actions are accepted
-    void setRestricted(bool mode);
+    // while restricted (collage view, slideshow mode) only a few actions are accepted
+    enum class Restriction { None, Collage, Slideshow };
+    void setRestriction(Restriction mode);
+    Restriction restriction() const;
 public slots:
     bool invokeAction(const QString &actionName);
 private:
     explicit ActionManager(QObject *parent = nullptr);
     QMap<QString, QString> defaults, shortcuts; // <shortcut, action>
-    bool mRestricted = false;
+    Restriction mRestriction = Restriction::None;
 
     static void initDefaults();
     static void initActions();
@@ -119,6 +121,7 @@ signals:
     void volumeUp();
     void volumeDown();
     void toggleSlideshow();
+    void toggleRulers();
     void discardEdits();
     void goUp();
     void nextDirectory();

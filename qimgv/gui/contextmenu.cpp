@@ -86,6 +86,16 @@ ContextMenu::ContextMenu(QWidget *parent) :
     ui->collage->setIconPath(":/res/icons/common/menuitem/collage16.png");
     ui->collage->setShortcutText("");
 
+    ui->slideshow->setAction("toggleSlideshow");
+    ui->slideshow->setText(tr("Slideshow"));
+    ui->slideshow->setIconPath(":/res/icons/common/menuitem/slideshow16.png");
+    ui->slideshow->setShortcutText("");
+
+    ui->rulers->setAction("toggleRulers");
+    ui->rulers->setText(tr("Rulers"));
+    ui->rulers->setIconPath(":/res/icons/common/menuitem/ruler16.png");
+    ui->rulers->setShortcutText("");
+
     ui->settings->setAction("openSettings");
     ui->settings->setText(tr("Settings"));
     ui->settings->setIconPath(":/res/icons/common/menuitem/settings16.png");

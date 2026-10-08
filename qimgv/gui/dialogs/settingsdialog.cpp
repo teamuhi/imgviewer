@@ -89,11 +89,16 @@ SettingsDialog::SettingsDialog(QWidget *parent) :
 #endif
 
 #ifndef USE_MPV
-    ui->videoPlaybackGroup->setEnabled(false);
-    //ui->novideoInfoLabel->setHidden(false);
-#else
-    //ui->novideoInfoLabel->setHidden(true);
+    // the choice is still stored (and togglable): it takes effect in a build with a video player
+    {
+        QLabel *noVideoLabel = new QLabel(tr("This build has no video player (libmpv). The setting is saved, "
+                                             "but videos only play in a build made with video support."), ui->videoPlaybackGroup);
+        noVideoLabel->setWordWrap(true);
+        noVideoLabel->setAccessibleName("SettingsNote");
+        ui->videoPlaybackGroup->layout()->addWidget(noVideoLabel);
+    }
 #endif
+    setupExtraControls();
 
 #ifdef USE_OPENCV
     ui->scalingQualityComboBox->addItem("Bilinear+sharpen (OpenCV)");
@@ -189,10 +194,204 @@ void SettingsDialog::setupSidebar() {
 
 }
 //------------------------------------------------------------------------------
+// General page additions that are easier to build in code than in the .ui:
+// slideshow transition / caption options and the interface font group
+void SettingsDialog::setupExtraControls() {
+    // --- slideshow -----------------------------------------------------------
+    ui->slideshowIntervalSpinBox->setRange(500, 120000);
+    ui->slideshowIntervalSpinBox->setSingleStep(500);
+    ui->slideshowIntervalSpinBox->setValue(3000);
+    QHBoxLayout *slideRow = new QHBoxLayout();
+    slideRow->setContentsMargins(0, 0, 0, 0);
+    slideRow->setSpacing(7);
+    slideRow->addWidget(new QLabel(tr("Transition:"), ui->slideshowGroup));
+    slideTransitionComboBox = new QComboBox(ui->slideshowGroup);
+    slideTransitionComboBox->addItems({ tr("None"), tr("Fade"), tr("Slide"), tr("Zoom") });
+    slideRow->addWidget(slideTransitionComboBox);
+    slideRow->addSpacing(10);
+    slideShowNameCheckBox = new QCheckBox(tr("Show file name"), ui->slideshowGroup);
+    slideShowDateCheckBox = new QCheckBox(tr("Show date"), ui->slideshowGroup);
+    slideRow->addWidget(slideShowNameCheckBox);
+    slideRow->addWidget(slideShowDateCheckBox);
+    slideRow->addStretch(1);
+    if(QBoxLayout *box = qobject_cast<QBoxLayout*>(ui->slideshowGroup->layout()))
+        box->addLayout(slideRow);
+
+    // --- interface font --------------------------------------------------------
+    QWidget *fontGroup = new QWidget(ui->scrollAreaWidgetContents);
+    fontGroup->setAccessibleName("SGroup");
+    QVBoxLayout *fontLayout = new QVBoxLayout(fontGroup);
+    fontLayout->setContentsMargins(13, 10, 13, 10);
+    fontLayout->setSpacing(7);
+    QLabel *fontTitle = new QLabel(tr("Interface font"), fontGroup);
+    QFont bold = fontTitle->font();
+    bold.setBold(true);
+    fontTitle->setFont(bold);
+    fontLayout->addWidget(fontTitle);
+
+    QHBoxLayout *fontRow = new QHBoxLayout();
+    fontRow->setSpacing(7);
+    fontComboBox = new QFontComboBox(fontGroup);
+    fontComboBox->setEditable(false);
+    fontComboBox->setMinimumWidth(160);
+    fontComboBox->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    fontMonospaceCheckBox = new QCheckBox(tr("Monospaced only"), fontGroup);
+    QPushButton *fontResetButton = new QPushButton(tr("Reset"), fontGroup);
+    fontResetButton->setToolTip(tr("Back to the default font (Consolas)"));
+    fontRow->addWidget(fontComboBox, 1);
+    fontRow->addWidget(fontMonospaceCheckBox);
+    fontRow->addWidget(fontResetButton);
+    fontLayout->addLayout(fontRow);
+
+    fontPreviewLabel = new QLabel(tr("The quick brown fox jumps over the lazy dog  0123456789"), fontGroup);
+    fontPreviewLabel->setWordWrap(true);
+    fontLayout->addWidget(fontPreviewLabel);
+
+    connect(fontComboBox, &QFontComboBox::currentFontChanged, this, [this](const QFont &font) {
+        QFont preview = fontPreviewLabel->font();
+        preview.setFamily(font.family());
+        fontPreviewLabel->setFont(preview);
+    });
+    connect(fontMonospaceCheckBox, &QCheckBox::toggled, this, [this](bool mono) {
+        QString current = fontComboBox->currentFont().family();
+        fontComboBox->setFontFilters(mono ? QFontComboBox::MonospacedFonts : QFontComboBox::AllFonts);
+        fontComboBox->setCurrentFont(QFont(current));
+    });
+    connect(fontResetButton, &QPushButton::clicked, this, [this]() {
+        fontComboBox->setCurrentFont(QFont(Settings::defaultFontFamilies().first()));
+    });
+
+    // right after the slideshow group (keeps the page order: behaviour first, looks last)
+    if(QBoxLayout *page = qobject_cast<QBoxLayout*>(ui->scrollAreaWidgetContents->layout())) {
+        int index = page->indexOf(ui->slideshowGroup);
+        if(index < 0)
+            index = page->count() - 1;
+        page->insertSpacing(index + 1, 12);
+        page->insertWidget(index + 2, fontGroup);
+    }
+
+    // --- rulers & guides (View page) ----------------------------------------------
+    QWidget *rulerGroup = new QWidget(ui->scrollAreaWidgetContents_3);
+    rulerGroup->setAccessibleName("SGroup");
+    QVBoxLayout *rulerLayout = new QVBoxLayout(rulerGroup);
+    rulerLayout->setContentsMargins(13, 10, 13, 10);
+    rulerLayout->setSpacing(7);
+    QLabel *rulerTitle = new QLabel(tr("Rulers & guides"), rulerGroup);
+    rulerTitle->setFont(bold);
+    rulerLayout->addWidget(rulerTitle);
+
+    rulersCheckBox = new QCheckBox(tr("Show rulers (image view, collage view and collage editor)"), rulerGroup);
+    rulersCheckBox->setToolTip(tr("Drag from a ruler onto the canvas to add a guide line. Drag a guide back onto a ruler to remove it."));
+    rulerLayout->addWidget(rulersCheckBox);
+
+    QWidget *rulerOptions = new QWidget(rulerGroup);
+    QVBoxLayout *rulerOptionsLayout = new QVBoxLayout(rulerOptions);
+    rulerOptionsLayout->setContentsMargins(0, 0, 0, 0);
+    rulerOptionsLayout->setSpacing(7);
+
+    QHBoxLayout *unitRow = new QHBoxLayout();
+    unitRow->setSpacing(7);
+    unitRow->addWidget(new QLabel(tr("Units:"), rulerOptions));
+    rulerUnitComboBox = new QComboBox(rulerOptions);
+    rulerUnitComboBox->addItems({ tr("Pixels"), tr("Centimeters"), tr("Inches"), tr("Mixed") });
+    rulerUnitComboBox->setToolTip(tr("Mixed: pixels on the outer scale, centimeters or inches on the inner scale"));
+    unitRow->addWidget(rulerUnitComboBox);
+    unitRow->addSpacing(10);
+    QLabel *mixedLabel = new QLabel(tr("Mixed inner scale:"), rulerOptions);
+    unitRow->addWidget(mixedLabel);
+    rulerMixedComboBox = new QComboBox(rulerOptions);
+    rulerMixedComboBox->addItems({ tr("Centimeters"), tr("Inches") });
+    unitRow->addWidget(rulerMixedComboBox);
+    unitRow->addStretch(1);
+    rulerOptionsLayout->addLayout(unitRow);
+
+    QHBoxLayout *dpiRow = new QHBoxLayout();
+    dpiRow->setSpacing(7);
+    dpiRow->addWidget(new QLabel(tr("Fallback DPI:"), rulerOptions));
+    rulerDpiSpinBox = new QSpinBox(rulerOptions);
+    rulerDpiSpinBox->setRange(30, 2400);
+    rulerDpiSpinBox->setValue(96);
+    rulerDpiSpinBox->setToolTip(tr("Used to convert pixels to centimeters / inches when the image has no DPI of its own. "
+                                   "The collage always uses this value."));
+    dpiRow->addWidget(rulerDpiSpinBox);
+    dpiRow->addSpacing(10);
+    rulerImageDpiCheckBox = new QCheckBox(tr("Use the image's DPI when available"), rulerOptions);
+    dpiRow->addWidget(rulerImageDpiCheckBox);
+    dpiRow->addStretch(1);
+    rulerOptionsLayout->addLayout(dpiRow);
+
+    QHBoxLayout *snapRow = new QHBoxLayout();
+    snapRow->setSpacing(7);
+    rulerSnapCheckBox = new QCheckBox(tr("Snap guides to multiples of"), rulerOptions);
+    rulerSnapComboBox = new QComboBox(rulerOptions);
+    rulerSnapComboBox->setEditable(true);
+    rulerSnapComboBox->setValidator(new QIntValidator(1, 10000, rulerSnapComboBox));
+    rulerSnapComboBox->addItems({ "1", "2", "5", "10", "20", "25", "50", "100" });
+    rulerSnapComboBox->setToolTip(tr("1 = whole pixels, 2 = even numbers, 5, 10, ... (in image / canvas pixels)"));
+    snapRow->addWidget(rulerSnapCheckBox);
+    snapRow->addWidget(rulerSnapComboBox);
+    snapRow->addWidget(new QLabel(tr("px"), rulerOptions));
+    snapRow->addStretch(1);
+    rulerOptionsLayout->addLayout(snapRow);
+    connect(rulerSnapCheckBox, &QCheckBox::toggled, rulerSnapComboBox, &QWidget::setEnabled);
+
+    QHBoxLayout *guideRow = new QHBoxLayout();
+    guideRow->setSpacing(7);
+    QPushButton *clearGuidesButton = new QPushButton(tr("Clear saved guides"), rulerOptions);
+    guideRow->addWidget(clearGuidesButton);
+    guideRow->addStretch(1);
+    rulerOptionsLayout->addLayout(guideRow);
+    rulerLayout->addWidget(rulerOptions);
+
+    QLabel *rulerNote = new QLabel(tr("Toggle with Ctrl+Shift+R (rebind it in Controls). Double-click a ruler for exact guide positions and snapping, right-click it for quick unit changes."), rulerGroup);
+    rulerNote->setWordWrap(true);
+    rulerNote->setAccessibleName("SettingsNote");
+    rulerLayout->addWidget(rulerNote);
+
+    connect(rulersCheckBox, &QCheckBox::toggled, rulerOptions, &QWidget::setEnabled);
+    auto syncMixed = [this, mixedLabel]() {
+        bool mixed = (rulerUnitComboBox->currentIndex() == RULER_MIXED);
+        mixedLabel->setEnabled(mixed);
+        rulerMixedComboBox->setEnabled(mixed);
+    };
+    connect(rulerUnitComboBox, qOverload<int>(&QComboBox::currentIndexChanged), this, syncMixed);
+    connect(clearGuidesButton, &QPushButton::clicked, this, []() {
+        settings->setRulerGuides("image", QStringList());
+        settings->setRulerGuides("collage", QStringList());
+        settings->sendChangeNotification();
+    });
+    syncMixed();
+    rulerOptions->setEnabled(rulersCheckBox->isChecked());
+
+    if(QBoxLayout *page = qobject_cast<QBoxLayout*>(ui->scrollAreaWidgetContents_3->layout())) {
+        int index = page->count() - 1; // before the trailing stretch
+        page->insertSpacing(index, 12);
+        page->insertWidget(index + 1, rulerGroup);
+    }
+}
+//------------------------------------------------------------------------------
 void SettingsDialog::readSettings() {
     ui->loopSlideshowCheckBox->setChecked(settings->loopSlideshow());
-    ui->videoPlaybackCheckBox->setChecked(settings->videoPlayback());
-    ui->videoPlaybackGroupContents->setEnabled(settings->videoPlayback());
+    ui->videoPlaybackCheckBox->setChecked(settings->videoPlaybackEnabled());
+    ui->videoPlaybackGroupContents->setEnabled(settings->videoPlaybackEnabled());
+    slideTransitionComboBox->setCurrentIndex(settings->slideshowTransition());
+    slideShowNameCheckBox->setChecked(settings->slideshowShowName());
+    slideShowDateCheckBox->setChecked(settings->slideshowShowDate());
+    rulersCheckBox->setChecked(settings->rulersEnabled());
+    rulerUnitComboBox->setCurrentIndex(settings->rulerUnit());
+    rulerMixedComboBox->setCurrentIndex(settings->rulerMixedUnit() == RULER_IN ? 1 : 0);
+    rulerDpiSpinBox->setValue(settings->rulerDpi());
+    rulerImageDpiCheckBox->setChecked(settings->rulerUseImageDpi());
+    rulerSnapCheckBox->setChecked(settings->rulerSnap());
+    rulerSnapComboBox->setCurrentText(QString::number(settings->rulerSnapStep()));
+    rulerSnapComboBox->setEnabled(rulerSnapCheckBox->isChecked());
+    {
+        QString family = settings->interfaceFont();
+        if(family.isEmpty() || !Settings::fontInstalled(family))
+            family = QApplication::font().family();
+        fontComboBox->setCurrentFont(QFont(family));
+        loadedFontFamily = fontComboBox->currentFont().family();
+    }
     ui->playSoundsCheckBox->setChecked(settings->playVideoSounds());
     ui->allowMp4CheckBox->setChecked(settings->allowMp4());
     ui->enablePanelCheckBox->setChecked(settings->panelEnabled());
@@ -409,6 +608,32 @@ void SettingsDialog::saveSettings() {
         settings->setFocusPointIn1to1Mode(FOCUS_CURSOR);
 
     settings->setSlideshowInterval(ui->slideshowIntervalSpinBox->value());
+    settings->setSlideshowTransition(slideTransitionComboBox->currentIndex());
+    settings->setSlideshowShowName(slideShowNameCheckBox->isChecked());
+    settings->setSlideshowShowDate(slideShowDateCheckBox->isChecked());
+    settings->setRulersEnabled(rulersCheckBox->isChecked());
+    settings->setRulerUnit(rulerUnitComboBox->currentIndex());
+    settings->setRulerMixedUnit(rulerMixedComboBox->currentIndex() == 1 ? RULER_IN : RULER_CM);
+    settings->setRulerDpi(rulerDpiSpinBox->value());
+    settings->setRulerUseImageDpi(rulerImageDpiCheckBox->isChecked());
+    settings->setRulerSnap(rulerSnapCheckBox->isChecked());
+    {
+        bool ok = false;
+        int step = rulerSnapComboBox->currentText().toInt(&ok);
+        if(ok)
+            settings->setRulerSnapStep(step);
+    }
+
+    // interface font: applied right away, the stylesheet is rebuilt from the new metrics
+    {
+        QString family = fontComboBox->currentFont().family();
+        if(family.compare(loadedFontFamily, Qt::CaseInsensitive) != 0) {
+            loadedFontFamily = family;
+            settings->setInterfaceFont(family);
+            Settings::applyInterfaceFont(family);
+            settings->loadStylesheet();
+        }
+    }
 
     if(ui->startInFolderViewCheckBox->isChecked())
         settings->setDefaultViewMode(MODE_FOLDERVIEW);

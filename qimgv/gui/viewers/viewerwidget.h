@@ -8,6 +8,7 @@
 #include "gui/overlays/zoomindicatoroverlayproxy.h"
 #include "gui/overlays/clickzoneoverlay.h"
 #include "gui/contextmenu.h"
+#include "gui/customwidgets/rulers.h"
 
 enum CurrentWidget {
     IMAGEVIEWER,
@@ -35,7 +36,12 @@ public:
     bool lockViewEnabled();
     ScalingFilter scalingFilter();
 
+    // rulers: DPI of the shown image (0 = unknown); hidden while a slideshow runs
+    void setImageDpi(qreal dpi);
+    void setRulersSuppressed(bool suppressed);
+
 private:
+    RulerController *rulers = nullptr;
     QVBoxLayout layout;
     std::unique_ptr<ImageViewerV2> imageViewer;
     std::unique_ptr<VideoPlayerInitProxy> videoPlayer;
