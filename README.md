@@ -1,36 +1,26 @@
-## :exclamation: Updates may be slow due to war in Ukraine :sunflower: :sunflower: :sunflower:
+This is based on the main repo of [qimgv](https://github.com/easymodo/qimgv), this is just for my personal use only and I do not claim or own anyting on this project.
 
 qimgv | Current version: 1.0.5
 =====
 Image viewer. Fast, easy to use. Optional video support.
 
+> **Note:** This is a fork of [easymodo/qimgv](https://github.com/easymodo/qimgv)
+
 ## Screenshots
 
-Main window & panel        |  Folder view   |  Settings window  
+Main window & panel        |  Collage view   |  Settings window  
 :-------------------------:|:-------------------------:|:-------------------------:|
-[![img1](qimgv/distrib/screenshots/qimgv0.9_1_thumb.jpg)](qimgv/distrib/screenshots/qimgv0.9_1.jpg?raw=true)  |  [![img2](qimgv/distrib/screenshots/qimgv0.9_2_thumb.jpg)](qimgv/distrib/screenshots/qimgv0.9_2.jpg?raw=true) | [![img3](qimgv/distrib/screenshots/qimgv_3_thumb.jpg)](qimgv/distrib/screenshots/qimgv_3.jpg?raw=true)
+[![img1](qimgv/distrib/screenshots/qimgv.PNG)] |  [![img2](qimgv/distrib/screenshots/qimgv0.9_2_thumb.jpg)]| [![img3](qimgv/distrib/screenshots/qimgv3.PNG)](qimgv/distrib/screenshots/qimgv2.PNG)
 
-## Key features:
+## New Key features:
 
-- Simple UI
+- Collage view and collage export
 
-- Fast
+- Improved slideshow function
 
-- Easy to use
+- Added more image format support
 
-- Fully configurable, including themes, shortcuts
-
-- High quality scaling
-
-- Basic image editing: Crop, Rotate and Resize
-
-- Ability to quickly copy / move images to different folders
-
-- Experimental video playback via libmpv
-
-- Folder view mode
-
-- Ability to run shell scripts
+- Batch image format convertion
 
 ## Default control scheme:
 
@@ -94,18 +84,38 @@ Note: you can configure every shortcut by going to __Settings > Controls__
 ### Top bar
 
 - The menu row on the left (General, View, Theme, Controls, Scripts, Advanced, About) opens the settings dialog on that page. On narrow windows it collapses into a *Settings* dropdown.
+
 - The percentage on the right is the current magnification of the image.
+
 - __Settings > View > Performance > Show CPU / RAM usage in the top bar__ (on by default) adds the CPU and memory usage of qimgv itself, updated every second. Hidden on narrow windows. In fullscreen the same readout shows in the top right corner together with the fullscreen info bar.
+
 - The bar can be turned off in __Settings > General > Top bar__ (it is always hidden in fullscreen).
 
 ### Slideshow
 
-Start it with the Slideshow button in the top bar (or the context menu). The top bar, panels and info bars are hidden; moving the mouse shows the slideshow bar (previous / pause / next, timer, transition None / Fade / Slide / Zoom, loop, show file name / date, Exit). The same options are in __Settings > General > Slideshow__. Editing actions (delete, crop, rename...) are blocked while it runs.
+Start it with the Slideshow button in the top bar (or the context menu). The top bar, panels and info bars are hidden; moving the mouse shows the slideshow bar (previous / pause / next, timer, transition style, loop, settings gear, Exit). The timer, style and loop are also in __Settings > General > Slideshow__. Editing actions (delete, crop, rename...) are blocked while it runs.
+
+The gear opens the __slideshow settings__ popup above the bar (it closes with Esc or a click outside it; the bar stays visible while it is open):
+
+| Option | What it does |
+| ------------- | ------------- |
+| Captions: Name / Date / Text size | file name and modified date shown bottom left; text size 75-300 % |
+| Duration | length of the transition (0.08-3 s, never more than 80 % of the time per slide) |
+| Easing | cubic-bezier graph: drag the two handles for the ease in / ease out (double-click a handle to reset it, overshoot allowed), or pick a preset |
+| Strength | main amount of the effect (blur, pixel size, zoom, travel distance, streak length...) |
+| Softness | feathered edge of Wipe / Iris |
+| Block size | tile size of Dissolve |
+| Direction | Auto (follows next / previous), Left, Right, Up, Down |
+| Dip color | any color for "Dip to color" (picker or Black / White / Accent) |
+| Random style | a different style on every slide |
+
+Transition styles: None, Fade, Slide, Zoom, Dip to color, Blur fade, Motion blur, Pixel mash, Push, Cover, Wipe, Iris, Dissolve. Controls that the chosen style does not use are greyed out.
 
 | Action (slideshow) | Shortcut |
 | ------------- | ------------- |
 | Pause / resume | Space |
 | Previous / next slide | Left / Right |
+| Close the settings popup | Esc (first press, while it is open) |
 | Leave the slideshow | Esc (in fullscreen: leaves fullscreen first) |
 | Fullscreen | F / F11 |
 
@@ -139,7 +149,7 @@ Only a few shortcuts work while the collage is open (open, settings, fullscreen,
 | Switch to editor / back to view | E |
 | Show the toolbar (it slides in, and slides out again after a moment) | Move the cursor to the top edge |
 | Canvas (Window, pixel presets like 1920 x 1080 / 1080 x 1920, Custom W x H, shared with the editor) | "Canvas" dropdown in the bar (not used by Freehand) |
-| Background colour (or the theme background) / tile outline (width, colour, style) | "Background" + "Theme" / "Border" in the bar |
+| Background colour with opacity (or the theme background) / tile outline (width, colour, style) | "Background" + "Color" + opacity % / "Border" in the bar |
 | Grid / Row / Column options (columns, rows, cell size, rotation, style: tiles, circle, hexagon, polygon / star) | "Layout options" in the bar |
 | Exit the collage | "Exit" (first button of the bar) |
 | Crop in Freehand (drag pans the picture, wheel zooms it, handles off) | "Crop" toggle in the toolbar |

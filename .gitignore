@@ -21,4 +21,5 @@ ui_settingsdialog.h
 Makefile
 CLAUDE.md
 CLAUDELOGS.md
+deploy.ps1
 dist

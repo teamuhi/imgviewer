@@ -40,6 +40,7 @@ target_sources(qimgv PRIVATE
     customwidgets/entryinfoitem.cpp
     customwidgets/ssidebar.cpp
     customwidgets/scrubspinbox.cpp
+    customwidgets/easecurveeditor.cpp
     customwidgets/rulers.cpp
 
     dialogs/colorpickerdialog.cpp
@@ -62,6 +63,7 @@ target_sources(qimgv PRIVATE
     overlays/fullscreenstatsoverlay.cpp
     overlays/slideshowbar.cpp
     overlays/slideshowcaption.cpp
+    overlays/slideshowsettingspanel.cpp
     overlays/slidetransition.cpp
     overlays/imageinfooverlay.cpp
     overlays/imageinfooverlayproxy.cpp

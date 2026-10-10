@@ -1,4 +1,5 @@
 #include "mainwindow.h"
+#include <QRandomGenerator>
 
 // TODO: nuke this and rewrite
 
@@ -570,7 +571,9 @@ void MW::keyPressEvent(QKeyEvent *event) {
             emit slideshowStepRequested(1);
             return;
         case Qt::Key_Escape:
-            if(isFullScreen())
+            if(slideshowSettings && slideshowSettings->isVisible())
+                setSlideshowSettingsOpen(false);
+            else if(isFullScreen())
                 showWindowed();
             else
                 emit slideshowExitRequested();
@@ -926,11 +929,21 @@ void MW::ensureSlideshowWidgets() {
     slideshowBar = new SlideshowBar(viewerWidget.get());
     slideshowCaption = new SlideshowCaption(viewerWidget.get());
     slideTransition = new SlideTransition(viewerWidget.get());
+    slideshowSettings = new SlideshowSettingsPanel(viewerWidget.get(), slideshowBar);
+    connect(slideshowBar, &SlideshowBar::settingsRequested, this, [this]() {
+        setSlideshowSettingsOpen(!slideshowSettings->isVisible());
+    });
     connect(slideshowBar, &SlideshowBar::prevRequested,  this, [this]() { emit slideshowStepRequested(-1); });
     connect(slideshowBar, &SlideshowBar::nextRequested,  this, [this]() { emit slideshowStepRequested(1); });
     connect(slideshowBar, &SlideshowBar::pauseRequested, this, &MW::slideshowPauseRequested);
     connect(slideshowBar, &SlideshowBar::exitRequested,  this, &MW::slideshowExitRequested);
     connect(slideshowBar, &SlideshowBar::optionsChanged, this, [this]() {
+        slideshowSettings->readSettings(); // the style decides which of its controls are active
+        slideshowCaption->refresh();
+        placeSlideshowCaption();
+        emit slideshowOptionsChanged();
+    });
+    connect(slideshowSettings, &SlideshowSettingsPanel::optionsChanged, this, [this]() {
         slideshowCaption->refresh();
         placeSlideshowCaption();
         emit slideshowOptionsChanged();
@@ -981,6 +994,7 @@ void MW::setSlideshowMode(bool enabled) {
             slideshowCursorHidden = false;
         }
         slideTransition->finish();
+        setSlideshowSettingsOpen(false);
         slideshowBar->hide();
         slideshowCaption->hide();
         docWidget->setPanelSuppressed(false);
@@ -1012,7 +1026,7 @@ void MW::slideshowIdle() {
         return;
     // keep the bar while it is being used (hover, open combo popup, typing the timer)
     QWidget *focus = QApplication::focusWidget();
-    if(slideshowBar->underMouse() || QApplication::activePopupWidget() || QApplication::activeModalWidget()
+    if(slideshowBar->underMouse() || slideshowSettings->isVisible() || QApplication::activePopupWidget() || QApplication::activeModalWidget()
        || (focus && slideshowBar->isAncestorOf(focus))) {
         slideshowIdleTimer.start();
         return;
@@ -1027,32 +1041,92 @@ void MW::slideshowIdle() {
 bool MW::eventFilter(QObject *watched, QEvent *event) {
     if(slideshowMode && event->type() == QEvent::MouseMove)
         slideshowActivity();
+    // a click anywhere else in the window closes the settings popup (other windows - the colour
+    // dialog, combo popups - do not count as "outside")
+    if(slideshowMode && event->type() == QEvent::MouseButtonPress && slideshowSettings && slideshowSettings->isVisible()) {
+        QWidget *widget = qobject_cast<QWidget*>(watched);
+        if(widget && widget->window() == this && widget != slideshowSettings && !slideshowSettings->isAncestorOf(widget)
+           && widget != slideshowBar && !slideshowBar->isAncestorOf(widget))
+            setSlideshowSettingsOpen(false);
+    }
     return FloatingWidgetContainer::eventFilter(watched, event);
+}
+
+void MW::setSlideshowSettingsOpen(bool open) {
+    if(!slideshowSettings)
+        return;
+    if(open) {
+        slideshowActivity(); // bar visible, idle timer restarted
+        slideshowSettings->show();
+    } else {
+        slideshowSettings->hide();
+    }
+    slideshowBar->setSettingsOpen(open);
+}
+
+// everything the transition needs, read from the settings. "Random" picks a style other than the last one
+SlideTransitionParams MW::currentTransitionParams() {
+    SlideTransitionParams params;
+    params.style = settings->slideshowTransition();
+    if(settings->slideshowTransitionRandom()) {
+        int style;
+        do {
+            style = TRANSITION_FADE + int(QRandomGenerator::global()->bounded(TRANSITION_COUNT - TRANSITION_FADE));
+        } while(style == lastRandomTransition);
+        lastRandomTransition = style;
+        params.style = style;
+    }
+    // never longer than most of a slide
+    params.durationMs = qBound(80, settings->slideshowTransitionDuration(), qMax(80, settings->slideshowInterval() * 4 / 5));
+    QPointF c1, c2;
+    if(EaseCurveEditor::parse(settings->slideshowTransitionEase(), c1, c2))
+        params.curve = EaseCurveEditor::toEasing(c1, c2);
+    else
+        params.curve = EaseCurveEditor::toEasing(QPointF(0.65, 0), QPointF(0.35, 1));
+    params.strength = settings->slideshowTransitionStrength() / 100.0;
+    params.softness = settings->slideshowTransitionSoftness() / 100.0;
+    params.blockSize = settings->slideshowTransitionBlockSize();
+    params.directionMode = settings->slideshowTransitionDirection();
+    params.dipColor = settings->slideshowTransitionDipColor();
+    return params;
+}
+
+// hides the slideshow chrome (and optionally more) for one grab of the viewer
+static QPixmap grabWithout(QWidget *viewer, const QList<QWidget*> &hidden) {
+    QList<bool> visible;
+    for(QWidget *widget : hidden) {
+        visible.append(widget->isVisible());
+        widget->setVisible(false);
+    }
+    QPixmap frame = viewer->grab();
+    for(int i = 0; i < hidden.size(); i++)
+        hidden[i]->setVisible(visible[i]);
+    return frame;
 }
 
 void MW::prepareSlideTransition(int direction) {
     if(!slideshowMode || currentViewMode() != MODE_DOCUMENT || !viewerWidget->isDisplaying())
         return;
-    int style = settings->slideshowTransition();
-    if(style == TRANSITION_NONE)
+    const SlideTransitionParams params = currentTransitionParams();
+    if(params.style == TRANSITION_NONE)
         return;
-    // the bar / caption are not part of the picture that leaves
-    bool barVisible = slideshowBar->isVisible(), captionVisible = slideshowCaption->isVisible();
-    slideshowBar->setVisible(false);
-    slideshowCaption->setVisible(false);
-    QPixmap snapshot = viewerWidget->grab();
-    slideshowBar->setVisible(barVisible);
-    slideshowCaption->setVisible(captionVisible);
-    slideTransition->arm(snapshot, style, direction);
+    // the bar / caption / popup are not part of the picture that leaves
+    QPixmap snapshot = grabWithout(viewerWidget.get(), { slideshowBar, slideshowCaption, slideshowSettings });
+    slideTransition->arm(snapshot, params, direction);
     slideshowBar->raise();
     slideshowCaption->raise();
+    slideshowSettings->raise();
 }
 
 void MW::startSlideTransition() {
     if(!slideTransition || !slideTransition->isArmed())
         return;
-    // never longer than half a slide
-    slideTransition->start(qMin(400, settings->slideshowInterval() / 2));
+    // the new slide as well, so the styles can blend / push / mask it. Left empty the old slide
+    // just moves away over the live viewer
+    QPixmap newFrame;
+    if(slideTransition->needsNewFrame())
+        newFrame = grabWithout(viewerWidget.get(), { slideTransition, slideshowBar, slideshowCaption, slideshowSettings });
+    slideTransition->start(newFrame);
 }
 
 // Esc inside the collage: editor -> collage view -> image viewer

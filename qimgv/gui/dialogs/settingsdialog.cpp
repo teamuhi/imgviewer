@@ -1,4 +1,5 @@
 #include "settingsdialog.h"
+#include "gui/overlays/slidetransition.h"
 #include "ui_settingsdialog.h"
 
 SettingsDialog::SettingsDialog(QWidget *parent) :
@@ -206,7 +207,7 @@ void SettingsDialog::setupExtraControls() {
     slideRow->setSpacing(7);
     slideRow->addWidget(new QLabel(tr("Transition:"), ui->slideshowGroup));
     slideTransitionComboBox = new QComboBox(ui->slideshowGroup);
-    slideTransitionComboBox->addItems({ tr("None"), tr("Fade"), tr("Slide"), tr("Zoom") });
+    slideTransitionComboBox->addItems(SlideTransition::styleNames());
     slideRow->addWidget(slideTransitionComboBox);
     slideRow->addSpacing(10);
     slideShowNameCheckBox = new QCheckBox(tr("Show file name"), ui->slideshowGroup);

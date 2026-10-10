@@ -20,6 +20,8 @@ public:
     void setSlideOffset(int offset);
     void setPaused(bool paused);
     bool isSliding() const;
+    void setSettingsOpen(bool open); // gear button shows the pressed state while the popup is open
+    QWidget *settingsAnchor() const; // the gear button: the popup lines up with it
 
 public slots:
     void show();
@@ -31,6 +33,7 @@ signals:
     void nextRequested();
     void pauseRequested();
     void exitRequested();
+    void settingsRequested();
     void optionsChanged();
 
 protected:
@@ -41,10 +44,11 @@ private slots:
 
 private:
     QPushButton *prevButton = nullptr, *pauseButton = nullptr, *nextButton = nullptr, *exitButton = nullptr;
+    QPushButton *settingsButton = nullptr;
     QWidget *optionsBox = nullptr; // built after the base class already asked for a geometry update
     ScrubDoubleSpinBox *timerSpin = nullptr;
     QComboBox *transitionCombo = nullptr;
-    QCheckBox *loopCheck = nullptr, *nameCheck = nullptr, *dateCheck = nullptr;
+    QCheckBox *loopCheck = nullptr;
     QPropertyAnimation *slideAnimation = nullptr;
     int mSlideOffset = 0;
     bool hiding = false, paused = false, syncing = false;

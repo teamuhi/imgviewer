@@ -3,6 +3,7 @@
 #include <QLabel>
 #include "settings.h"
 #include "utils/imagelib.h"
+#include "gui/overlays/slidetransition.h"
 
 namespace {
 const int SLIDE_DURATION_MS = 180;
@@ -55,22 +56,26 @@ SlideshowBar::SlideshowBar(FloatingWidgetContainer *parent) : OverlayWidget(pare
     timerSpin->setSuffix(" s");
     timerSpin->setToolTip(tr("Time per slide. Drag sideways to change it (Shift = faster), or click to type."));
     transitionCombo = new QComboBox(optionsBox);
-    transitionCombo->addItems({ tr("No transition"), tr("Fade"), tr("Slide"), tr("Zoom") });
+    transitionCombo->addItems(SlideTransition::styleNames());
     transitionCombo->setFocusPolicy(Qt::NoFocus);
+    transitionCombo->setMaxVisibleItems(TRANSITION_COUNT);
     loopCheck = new QCheckBox(tr("Loop"), optionsBox);
-    nameCheck = new QCheckBox(tr("Name"), optionsBox);
-    dateCheck = new QCheckBox(tr("Date"), optionsBox);
-    nameCheck->setToolTip(tr("Show the file name"));
-    dateCheck->setToolTip(tr("Show the date the file was modified"));
-    for(QCheckBox *check : { loopCheck, nameCheck, dateCheck })
-        check->setFocusPolicy(Qt::NoFocus);
+    loopCheck->setFocusPolicy(Qt::NoFocus);
     options->addWidget(timerLabel);
     options->addWidget(timerSpin);
     options->addWidget(transitionCombo);
     options->addWidget(loopCheck);
-    options->addWidget(nameCheck);
-    options->addWidget(dateCheck);
     layout->addWidget(optionsBox);
+
+    // transition / caption options popup. Outside optionsBox: stays reachable on narrow windows
+    settingsButton = new QPushButton(this);
+    settingsButton->setToolTip(tr("Slideshow settings"));
+    settingsButton->setFixedSize(BUTTON_SIZE, BUTTON_SIZE);
+    settingsButton->setIconSize(QSize(20, 20));
+    settingsButton->setCheckable(true);
+    settingsButton->setFocusPolicy(Qt::NoFocus);
+    settingsButton->setAccessibleName("SlideshowBarButton");
+    layout->addWidget(settingsButton);
 
     exitButton = new QPushButton(tr("Exit"), this);
     exitButton->setToolTip(tr("Leave the slideshow (Esc)"));
@@ -82,10 +87,10 @@ SlideshowBar::SlideshowBar(FloatingWidgetContainer *parent) : OverlayWidget(pare
     connect(nextButton, &QPushButton::clicked, this, &SlideshowBar::nextRequested);
     connect(pauseButton, &QPushButton::clicked, this, &SlideshowBar::pauseRequested);
     connect(exitButton, &QPushButton::clicked, this, &SlideshowBar::exitRequested);
+    connect(settingsButton, &QPushButton::clicked, this, &SlideshowBar::settingsRequested);
     connect(timerSpin, qOverload<double>(&QDoubleSpinBox::valueChanged), this, &SlideshowBar::saveOptions);
     connect(transitionCombo, qOverload<int>(&QComboBox::currentIndexChanged), this, &SlideshowBar::saveOptions);
-    for(QCheckBox *check : { loopCheck, nameCheck, dateCheck })
-        connect(check, &QCheckBox::toggled, this, &SlideshowBar::saveOptions);
+    connect(loopCheck, &QCheckBox::toggled, this, &SlideshowBar::saveOptions);
 
     slideAnimation = new QPropertyAnimation(this, "slideOffset", this);
     slideAnimation->setDuration(SLIDE_DURATION_MS);
@@ -117,6 +122,15 @@ void SlideshowBar::updateIcons() {
     prevButton->setIcon(tintedIcon(dir + "skip-backwards24@2x.png", color));
     nextButton->setIcon(tintedIcon(dir + "skip-forward24@2x.png", color));
     pauseButton->setIcon(tintedIcon(dir + (paused ? "play24@2x.png" : "pause24@2x.png"), color));
+    settingsButton->setIcon(tintedIcon(":/res/icons/common/buttons/panel/settings20@2x.png", color));
+}
+
+void SlideshowBar::setSettingsOpen(bool open) {
+    settingsButton->setChecked(open);
+}
+
+QWidget *SlideshowBar::settingsAnchor() const {
+    return settingsButton;
 }
 
 void SlideshowBar::setPaused(bool mode) {
@@ -132,8 +146,6 @@ void SlideshowBar::readSettings() {
     timerSpin->setValue(settings->slideshowInterval() / 1000.0);
     transitionCombo->setCurrentIndex(settings->slideshowTransition());
     loopCheck->setChecked(settings->loopSlideshow());
-    nameCheck->setChecked(settings->slideshowShowName());
-    dateCheck->setChecked(settings->slideshowShowDate());
     syncing = false;
 }
 
@@ -143,8 +155,6 @@ void SlideshowBar::saveOptions() {
     settings->setSlideshowInterval(qRound(timerSpin->value() * 1000.0));
     settings->setSlideshowTransition(transitionCombo->currentIndex());
     settings->setLoopSlideshow(loopCheck->isChecked());
-    settings->setSlideshowShowName(nameCheck->isChecked());
-    settings->setSlideshowShowDate(dateCheck->isChecked());
     emit optionsChanged();
 }
 

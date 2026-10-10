@@ -141,8 +141,9 @@ private:
     // view canvas: "Custom..." width / height
     QWidget *mViewCustomBox = nullptr;
     ScrubSpinBox *mViewCanvasWSpin, *mViewCanvasHSpin;
-    // view background: theme (colour + pattern) or the canvas colour
-    QCheckBox *mViewThemeBgCheck;
+    // view background: theme (colour + pattern), optionally covered by the canvas colour at some opacity
+    QCheckBox *mViewColorBgCheck;
+    ScrubSpinBox *mViewBgOpacitySpin;
     ColorSelectorButton *mViewBgButton;
     // "Border" popups of the view bar and the editor toolbar (same settings)
     struct BorderPopup {

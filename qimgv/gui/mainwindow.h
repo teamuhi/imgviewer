@@ -43,6 +43,7 @@
 #include "gui/overlays/slideshowbar.h"
 #include "gui/overlays/slideshowcaption.h"
 #include "gui/overlays/slidetransition.h"
+#include "gui/overlays/slideshowsettingspanel.h"
 
 #ifdef USE_KDE_BLUR
 #include <KWindowEffects>
@@ -149,10 +150,14 @@ private:
     SlideshowBar *slideshowBar = nullptr;
     SlideshowCaption *slideshowCaption = nullptr;
     SlideTransition *slideTransition = nullptr;
+    SlideshowSettingsPanel *slideshowSettings = nullptr;
+    int lastRandomTransition = TRANSITION_NONE;
     QTimer slideshowIdleTimer; // hides the bar and the cursor when the mouse rests
     bool slideshowCursorHidden = false;
     void ensureSlideshowWidgets();
     void placeSlideshowCaption(); // above the bar when the two would overlap
+    void setSlideshowSettingsOpen(bool open);
+    SlideTransitionParams currentTransitionParams();
     void slideshowActivity();
     void slideshowIdle();
 #if QT_VERSION < QT_VERSION_CHECK(5, 14, 0)

@@ -1,4 +1,5 @@
 #include "settings.h"
+#include "gui/overlays/slidetransitionstyle.h"
 
 Settings *settings = nullptr;
 
@@ -898,7 +899,7 @@ int Settings::slideshowInterval() {
 }
 
 int Settings::slideshowTransition() {
-    return qBound(0, settings->settingsConf->value("slideshowTransition", 1).toInt(), 3);
+    return qBound(0, settings->settingsConf->value("slideshowTransition", 1).toInt(), int(TRANSITION_COUNT) - 1);
 }
 
 void Settings::setSlideshowTransition(int style) {
@@ -919,6 +920,87 @@ bool Settings::slideshowShowDate() {
 
 void Settings::setSlideshowShowDate(bool mode) {
     settings->settingsConf->setValue("slideshowShowDate", mode);
+}
+
+int Settings::slideshowCaptionScale() {
+    return qBound(75, settings->settingsConf->value("slideshowCaptionScale", 100).toInt(), 300);
+}
+
+void Settings::setSlideshowCaptionScale(int percent) {
+    settings->settingsConf->setValue("slideshowCaptionScale", qBound(75, percent, 300));
+}
+
+int Settings::slideshowTransitionDuration() {
+    return qBound(80, settings->settingsConf->value("slideshowTransitionDuration", 400).toInt(), 3000);
+}
+
+void Settings::setSlideshowTransitionDuration(int ms) {
+    settings->settingsConf->setValue("slideshowTransitionDuration", qBound(80, ms, 3000));
+}
+
+QString Settings::slideshowTransitionEase() {
+    return settings->settingsConf->value("slideshowTransitionEase", "0.65,0,0.35,1").toString();
+}
+
+void Settings::setSlideshowTransitionEase(const QString &curve) {
+    settings->settingsConf->setValue("slideshowTransitionEase", curve);
+}
+
+int Settings::slideshowTransitionStrength() {
+    return qBound(0, settings->settingsConf->value("slideshowTransitionStrength", 50).toInt(), 100);
+}
+
+void Settings::setSlideshowTransitionStrength(int percent) {
+    settings->settingsConf->setValue("slideshowTransitionStrength", qBound(0, percent, 100));
+}
+
+int Settings::slideshowTransitionSoftness() {
+    return qBound(0, settings->settingsConf->value("slideshowTransitionSoftness", 30).toInt(), 100);
+}
+
+void Settings::setSlideshowTransitionSoftness(int percent) {
+    settings->settingsConf->setValue("slideshowTransitionSoftness", qBound(0, percent, 100));
+}
+
+int Settings::slideshowTransitionBlockSize() {
+    return qBound(16, settings->settingsConf->value("slideshowTransitionBlockSize", 64).toInt(), 256);
+}
+
+void Settings::setSlideshowTransitionBlockSize(int px) {
+    settings->settingsConf->setValue("slideshowTransitionBlockSize", qBound(16, px, 256));
+}
+
+int Settings::slideshowTransitionDirection() {
+    return qBound(0, settings->settingsConf->value("slideshowTransitionDirection", 0).toInt(), int(TRANSITION_DIR_DOWN));
+}
+
+void Settings::setSlideshowTransitionDirection(int direction) {
+    settings->settingsConf->setValue("slideshowTransitionDirection", direction);
+}
+
+QColor Settings::slideshowTransitionDipColor() {
+    QColor color(settings->settingsConf->value("slideshowTransitionDipColor", "#000000").toString());
+    return color.isValid() ? color : QColor(Qt::black);
+}
+
+void Settings::setSlideshowTransitionDipColor(const QColor &color) {
+    settings->settingsConf->setValue("slideshowTransitionDipColor", color.isValid() ? color.name() : QString("#000000"));
+}
+
+bool Settings::slideshowTransitionRandom() {
+    return settings->settingsConf->value("slideshowTransitionRandom", false).toBool();
+}
+
+void Settings::setSlideshowTransitionRandom(bool mode) {
+    settings->settingsConf->setValue("slideshowTransitionRandom", mode);
+}
+
+// the style, caption toggles and the timer are left alone
+void Settings::resetSlideshowTransitionOptions() {
+    for(const char *key : { "slideshowTransitionDuration", "slideshowTransitionEase", "slideshowTransitionStrength",
+                            "slideshowTransitionSoftness", "slideshowTransitionBlockSize", "slideshowTransitionDirection",
+                            "slideshowTransitionDipColor", "slideshowTransitionRandom", "slideshowCaptionScale" })
+        settings->settingsConf->remove(key);
 }
 //------------------------------------------------------------------------------
 QStringList Settings::defaultFontFamilies() {
@@ -1384,6 +1466,14 @@ bool Settings::collageViewThemeBackground() {
 
 void Settings::setCollageViewThemeBackground(bool mode) {
     settings->settingsConf->setValue("collageViewThemeBackground", mode);
+}
+
+int Settings::collageViewBgOpacity() {
+    return qBound(0, settings->settingsConf->value("collageViewBgOpacity", 100).toInt(), 100);
+}
+
+void Settings::setCollageViewBgOpacity(int percent) {
+    settings->settingsConf->setValue("collageViewBgOpacity", qBound(0, percent, 100));
 }
 
 int Settings::collageBorderWidth() {

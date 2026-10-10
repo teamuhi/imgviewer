@@ -37,6 +37,7 @@ CollageScene::CollageScene(QObject *parent) : QGraphicsScene(parent) {
     mBorderColor = settings->collageBorderColor();
     mBorderStyle = settings->collageBorderStyle();
     mThemeBackground = settings->collageViewThemeBackground();
+    mBackgroundOpacity = settings->collageViewBgOpacity();
 }
 
 CollageMode CollageScene::mode() const { return mMode; }
@@ -313,6 +314,14 @@ void CollageScene::setDefaultBorder(int width, const QColor &color, int style) {
 
 void CollageScene::setThemeBackground(bool theme) {
     mThemeBackground = theme;
+    update();
+}
+
+void CollageScene::setBackgroundOpacity(int percent) {
+    percent = qBound(0, percent, 100);
+    if(percent == mBackgroundOpacity)
+        return;
+    mBackgroundOpacity = percent;
     update();
 }
 
@@ -811,33 +820,31 @@ QPointF CollageScene::snapPosition(const CollageItem *item, const QPointF &pos) 
 
 //------------------------------------------------------------------------------
 void CollageScene::drawBackground(QPainter *painter, const QRectF &rect) {
-    if(mMode == CollageMode::View && !mThemeBackground) {
-        // the collage canvas colour: everywhere when the canvas is the window, inside the frame otherwise
-        auto fillCanvas = [this, painter](const QRectF &area) {
-            if(mCanvasColor.alpha() < 255) {
-                QBrush checker(mChecker);
-                checker.setTransform(QTransform::fromScale(1.0 / mViewScale, 1.0 / mViewScale));
-                painter->fillRect(area, checker);
-            }
-            painter->fillRect(area, mCanvasColor);
-        };
-        if(!hasViewShape()) {
-            fillCanvas(rect);
-            return;
-        }
-        painter->fillRect(rect, settings->colorScheme().background);
-        fillCanvas(canvasRect().intersected(rect));
-        return;
-    }
     if(mMode == CollageMode::View) {
-        // like the image viewer: theme background + pattern that stays put while zooming / panning
-        painter->fillRect(rect, settings->colorScheme().background);
-        if(!mPatternTile.isNull()) {
-            painter->save();
-            painter->resetTransform();
-            painter->drawTiledPixmap(painter->viewport(), mPatternTile);
-            painter->restore();
+        // theme background + pattern (pinned to the viewport, stays put while zooming / panning);
+        // a custom colour is laid over it with its own opacity
+        bool colorOnly = !mThemeBackground && mBackgroundOpacity >= 100 && mCanvasColor.alpha() == 255 && !hasViewShape();
+        if(!colorOnly) {
+            painter->fillRect(rect, settings->colorScheme().background);
+            if(!mPatternTile.isNull()) {
+                painter->save();
+                painter->resetTransform();
+                painter->drawTiledPixmap(painter->viewport(), mPatternTile);
+                painter->restore();
+            }
         }
+        if(mThemeBackground || mBackgroundOpacity == 0)
+            return;
+        // the collage canvas colour: everywhere when the canvas is the window, inside the frame otherwise
+        QColor fill = mCanvasColor;
+        fill.setAlphaF(fill.alphaF() * mBackgroundOpacity / 100.0);
+        QRectF area = hasViewShape() ? canvasRect().intersected(rect) : rect;
+        if(mCanvasColor.alpha() < 255) {
+            QBrush checker(mChecker);
+            checker.setTransform(QTransform::fromScale(1.0 / mViewScale, 1.0 / mViewScale));
+            painter->fillRect(area, checker);
+        }
+        painter->fillRect(area, fill);
         return;
     }
     // area around the canvas follows the app theme

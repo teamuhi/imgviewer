@@ -62,6 +62,8 @@ public:
     void setDefaultBorder(int width, const QColor &color, int style);
     // view background: theme colour + pattern, or the canvas colour
     void setThemeBackground(bool theme);
+    // opacity (0-100 %) of the custom colour over the theme background + pattern
+    void setBackgroundOpacity(int percent);
 
     // editor: frames follow an automatic layout instead of being placed by hand
     bool staticCanvas() const;
@@ -165,6 +167,7 @@ private:
     QColor mBorderColor;
     int mBorderStyle = 0;
     bool mThemeBackground = true;
+    int mBackgroundOpacity = 100;
 
     void applyLayoutResult(const QList<CollageItem*> &list, CollageLayout::Mode mode, const CollageLayout::Result &result);
     void resetCellStyle();

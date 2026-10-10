@@ -240,6 +240,26 @@ public:
     void setSlideshowShowName(bool mode);
     bool slideshowShowDate();
     void setSlideshowShowDate(bool mode);
+    int slideshowCaptionScale(); // percent of the normal caption text size
+    void setSlideshowCaptionScale(int percent);
+    // transition tuning (slideshow settings popup)
+    int slideshowTransitionDuration(); // ms
+    void setSlideshowTransitionDuration(int ms);
+    QString slideshowTransitionEase(); // "x1,y1,x2,y2" cubic bezier
+    void setSlideshowTransitionEase(const QString &curve);
+    int slideshowTransitionStrength(); // percent
+    void setSlideshowTransitionStrength(int percent);
+    int slideshowTransitionSoftness(); // percent
+    void setSlideshowTransitionSoftness(int percent);
+    int slideshowTransitionBlockSize(); // px
+    void setSlideshowTransitionBlockSize(int px);
+    int slideshowTransitionDirection(); // SlideTransitionDirection
+    void setSlideshowTransitionDirection(int direction);
+    QColor slideshowTransitionDipColor();
+    void setSlideshowTransitionDipColor(const QColor &color);
+    bool slideshowTransitionRandom();
+    void setSlideshowTransitionRandom(bool mode);
+    void resetSlideshowTransitionOptions();
 
     // rulers + guide lines (image viewer and collage canvas)
     bool rulersEnabled();
@@ -351,6 +371,8 @@ public:
     // view background: theme colour + pattern (true) or the collage canvas colour (false)
     bool collageViewThemeBackground();
     void setCollageViewThemeBackground(bool mode);
+    int collageViewBgOpacity();
+    void setCollageViewBgOpacity(int percent);
     // default tile outline (0 px = none), style = CollageBorderStyle
     int collageBorderWidth();
     void setCollageBorderWidth(int px);

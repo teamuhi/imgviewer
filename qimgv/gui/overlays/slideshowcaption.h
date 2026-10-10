@@ -17,4 +17,7 @@ private:
     QVBoxLayout layout;
     QLabel nameLabel, dateLabel;
     QString mPath;
+    int mAppliedScale = 100;
+
+    void applyScale();
 };

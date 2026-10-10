@@ -1520,23 +1520,28 @@ CollageWidget QSpinBox[accessibleName="ScrubSpinBox"] {
 /*----------------------------------------------------------------------------*/
 /* Slideshow mode: control bar (bottom centre) + caption (bottom left) */
 
-SlideshowBar {
+SlideshowBar,
+SlideshowSettingsPanel {
     background-color: %overlay_rgba%;
     border: 1px solid %widget_border%;
     border-radius: 8px;
 }
 
 SlideshowBar QLabel,
-SlideshowBar QCheckBox {
+SlideshowBar QCheckBox,
+SlideshowSettingsPanel QLabel,
+SlideshowSettingsPanel QCheckBox {
     background-color: transparent;
     color: %overlay_text%;
 }
 
-SlideshowBar QCheckBox {
+SlideshowBar QCheckBox,
+SlideshowSettingsPanel QCheckBox {
     spacing: 6px;
 }
 
-SlideshowBar QCheckBox::indicator {
+SlideshowBar QCheckBox::indicator,
+SlideshowSettingsPanel QCheckBox::indicator {
     width: 14px;
     height: 14px;
     background-color: %button%;
@@ -1544,17 +1549,20 @@ SlideshowBar QCheckBox::indicator {
     border-radius: 3px;
 }
 
-SlideshowBar QCheckBox::indicator:hover {
+SlideshowBar QCheckBox::indicator:hover,
+SlideshowSettingsPanel QCheckBox::indicator:hover {
     border-color: %accent%;
 }
 
-SlideshowBar QCheckBox::indicator:checked {
+SlideshowBar QCheckBox::indicator:checked,
+SlideshowSettingsPanel QCheckBox::indicator:checked {
     background-color: %accent%;
     border-color: %accent%;
     image: url(%check_icon%);
 }
 
-SlideshowBar QPushButton {
+SlideshowBar QPushButton,
+SlideshowSettingsPanel QPushButton {
     background-color: %button%;
     color: %text_hc%;
     border: 1px solid %widget_border%;
@@ -1566,16 +1574,20 @@ SlideshowBar QPushButton[accessibleName="SlideshowBarButton"] {
     padding: 0px;
 }
 
-SlideshowBar QPushButton:hover {
+SlideshowBar QPushButton:hover,
+SlideshowSettingsPanel QPushButton:hover {
     background-color: %button_hover%;
 }
 
-SlideshowBar QPushButton:pressed {
+SlideshowBar QPushButton:pressed,
+SlideshowSettingsPanel QPushButton:pressed {
     background-color: %button_pressed%;
 }
 
 SlideshowBar QDoubleSpinBox,
-SlideshowBar QComboBox {
+SlideshowBar QComboBox,
+SlideshowSettingsPanel QDoubleSpinBox,
+SlideshowSettingsPanel QComboBox {
     background-color: %button%;
     color: %text_hc%;
     border: 1px solid %widget_border%;
@@ -1586,21 +1598,90 @@ SlideshowBar QComboBox {
 }
 
 SlideshowBar QDoubleSpinBox:hover,
-SlideshowBar QComboBox:hover {
+SlideshowBar QComboBox:hover,
+SlideshowSettingsPanel QDoubleSpinBox:hover,
+SlideshowSettingsPanel QComboBox:hover {
     border-color: %text_lc%;
 }
 
-SlideshowBar QComboBox::drop-down {
+SlideshowBar QComboBox::drop-down,
+SlideshowSettingsPanel QComboBox::drop-down {
     border: none;
     width: 18px;
 }
 
-SlideshowBar QComboBox QAbstractItemView {
+SlideshowBar QComboBox QAbstractItemView,
+SlideshowSettingsPanel QComboBox QAbstractItemView {
     background-color: %button%;
     color: %text_hc%;
     border: 1px solid %widget_border%;
     selection-background-color: %accent%;
     outline: none;
+}
+
+SlideshowBar QPushButton:checked {
+    border-color: %accent%;
+}
+
+SlideshowSettingsPanel QScrollArea {
+    background: transparent;
+    border: none;
+}
+
+SlideshowSettingsPanel QScrollArea > QWidget > QWidget {
+    background: transparent;
+}
+
+[accessibleName="SlideshowPanelHeading"] {
+    font-weight: bold;
+    padding-bottom: 2px;
+}
+
+SlideshowSettingsPanel QPushButton {
+    min-height: 22px;
+}
+
+SlideshowSettingsPanel QSpinBox {
+    background-color: %button%;
+    color: %text_hc%;
+    border: 1px solid %widget_border%;
+    border-radius: 3px;
+    padding: 3px 6px;
+    min-height: 20px;
+    selection-background-color: %accent%;
+}
+
+SlideshowSettingsPanel QLabel:disabled,
+SlideshowSettingsPanel QCheckBox:disabled {
+    color: %text_lc2%;
+}
+
+SlideshowSettingsPanel QSlider::groove:horizontal {
+    height: 4px;
+    background: %widget_border%;
+    border-radius: 2px;
+}
+
+SlideshowSettingsPanel QSlider::sub-page:horizontal {
+    background: %accent%;
+    border-radius: 2px;
+}
+
+SlideshowSettingsPanel QSlider::handle:horizontal {
+    background: %text_hc%;
+    border: 1px solid %widget_border%;
+    width: 12px;
+    margin: -5px 0;
+    border-radius: 6px;
+}
+
+SlideshowSettingsPanel QSlider::handle:horizontal:hover {
+    background: %accent%;
+}
+
+SlideshowSettingsPanel QSlider::sub-page:horizontal:disabled,
+SlideshowSettingsPanel QSlider::handle:horizontal:disabled {
+    background: %widget_border%;
 }
 
 SlideshowCaption {

@@ -426,11 +426,16 @@ void CollageWidget::buildOverlay() {
     mViewBgButton->setMinimumSize(40, 22);
     mViewBgButton->setCursor(Qt::PointingHandCursor);
     mViewBgButton->setDescription(tr("Collage background"));
-    mViewThemeBgCheck = new QCheckBox(tr("Theme"), mOverlayBar);
-    mViewThemeBgCheck->setToolTip(tr("Use the app background and pattern. Off: the collage gets the colour on the left "
-                                     "(the same colour as the editor canvas)."));
-    mViewThemeBgCheck->setFocusPolicy(Qt::NoFocus);
-    connect(mViewThemeBgCheck, &QCheckBox::toggled, this, &CollageWidget::onViewBackgroundChanged);
+    mViewColorBgCheck = new QCheckBox(tr("Color"), mOverlayBar);
+    mViewColorBgCheck->setToolTip(tr("Paint the collage with the colour on the left (the same colour as the editor canvas). "
+                                     "Off: the app background and pattern show."));
+    mViewColorBgCheck->setFocusPolicy(Qt::NoFocus);
+    connect(mViewColorBgCheck, &QCheckBox::toggled, this, &CollageWidget::onViewBackgroundChanged);
+    mViewBgOpacitySpin = new ScrubSpinBox(mOverlayBar);
+    mViewBgOpacitySpin->setRange(0, 100);
+    mViewBgOpacitySpin->setSuffix(" %");
+    mViewBgOpacitySpin->setToolTip(tr("Opacity of the background colour. Drag sideways to change it (Shift = faster, Alt = finer), or click to type."));
+    connect(mViewBgOpacitySpin, qOverload<int>(&QSpinBox::valueChanged), this, &CollageWidget::onViewBackgroundChanged);
     connect(mViewBgButton, &ColorSelectorButton::colorChanged, this, [this](const QColor &color) {
         // a picked colour is the collage colour: shared with the editor canvas, opaque
         QColor opaque(color.red(), color.green(), color.blue());
@@ -442,12 +447,13 @@ void CollageWidget::buildOverlay() {
             mBackgroundButton->setEnabled(true);
         }
         mScene->setCanvasColor(opaque);
-        QSignalBlocker blockTheme(mViewThemeBgCheck);
-        mViewThemeBgCheck->setChecked(false);
+        QSignalBlocker blockColorCheck(mViewColorBgCheck);
+        mViewColorBgCheck->setChecked(true);
         onViewBackgroundChanged();
     });
     QWidget *backgroundGroup = labeled(tr("Background"), mViewBgButton, mOverlayBar);
-    backgroundGroup->layout()->addWidget(mViewThemeBgCheck);
+    backgroundGroup->layout()->addWidget(mViewColorBgCheck);
+    backgroundGroup->layout()->addWidget(mViewBgOpacitySpin);
 
     QToolButton *borderButton = makeBorderButton(mOverlayBar);
 
@@ -697,18 +703,25 @@ void CollageWidget::syncViewCanvasCombo() {
 }
 
 void CollageWidget::onViewBackgroundChanged() {
-    bool theme = mViewThemeBgCheck->isChecked();
-    settings->setCollageViewThemeBackground(theme);
-    mScene->setThemeBackground(theme);
+    bool colorOn = mViewColorBgCheck->isChecked();
+    mViewBgOpacitySpin->setEnabled(colorOn);
+    settings->setCollageViewThemeBackground(!colorOn);
+    settings->setCollageViewBgOpacity(mViewBgOpacitySpin->value());
+    mScene->setBackgroundOpacity(mViewBgOpacitySpin->value());
+    mScene->setThemeBackground(!colorOn);
 }
 
 void CollageWidget::syncBackgroundControls() {
-    QSignalBlocker blockTheme(mViewThemeBgCheck);
+    QSignalBlocker blockCheck(mViewColorBgCheck);
+    QSignalBlocker blockOpacity(mViewBgOpacitySpin);
     QSignalBlocker blockColor(mViewBgButton);
-    mViewThemeBgCheck->setChecked(settings->collageViewThemeBackground());
+    mViewColorBgCheck->setChecked(!settings->collageViewThemeBackground());
+    mViewBgOpacitySpin->setValue(settings->collageViewBgOpacity());
+    mViewBgOpacitySpin->setEnabled(mViewColorBgCheck->isChecked());
     QColor color = mScene->canvasColor();
     mViewBgButton->setColor(QColor(color.red(), color.green(), color.blue()));
-    mScene->setThemeBackground(mViewThemeBgCheck->isChecked());
+    mScene->setThemeBackground(!mViewColorBgCheck->isChecked());
+    mScene->setBackgroundOpacity(mViewBgOpacitySpin->value());
 }
 
 // panel: a floating card at the right edge of the view
@@ -1915,7 +1928,7 @@ QString CollageWidget::helpHtml(bool edit) {
             { tr("Layout"), tr("Mosaic, Grid, Row, Column or Freehand") },
             { tr("Layout options"), tr("Grid / Row / Column: columns, rows, cell size, rotation and cell style (tiles, circle, hexagon, polygon / star...)") },
             { tr("Canvas"), tr("Window, a pixel resolution (shared with the editor canvas) or Custom W x H (not used by Freehand)") },
-            { tr("Background"), tr("Theme = app background and pattern; or a colour of your own (also the editor canvas colour)") },
+            { tr("Background"), tr("App background and pattern, or a colour of your own (also the editor canvas colour) with an opacity") },
             { tr("Border"), tr("outline of every tile: width, colour, style (solid, dashed, dotted, dash-dot, double)") },
             { tr("Crop (Freehand)"), tr("drag moves the picture inside the tile, wheel zooms it, handles are off") },
             { tr("Gap"), tr("spacing between tiles (not used by Freehand)") },
