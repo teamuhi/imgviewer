@@ -1,10 +1,8 @@
-This is based on the main repo of [qimgv](https://github.com/easymodo/qimgv), this is just for my personal use only and I do not claim or own anyting on this project.
+A personal fork of [qimgv](https://github.com/easymodo/qimgv) by easymodo, made for my own use. I do not claim or own anything in the original project.
 
-qimgv | Current version: 1.0.5
+qimgv | Current version: 1.0.6
 =====
-Image viewer. Fast, easy to use. Optional video support.
-
-> **Note:** This is a fork of [easymodo/qimgv](https://github.com/easymodo/qimgv)
+A fast, lightweight image viewer with a clean, uncluttered interface: panels and bars only show up when you need them. Video playback is optional.
 
 ## Screenshots
 
@@ -12,15 +10,17 @@ Main window & panel        |  Collage view   |  Settings window
 :-------------------------:|:-------------------------:|:-------------------------:|
 [![img1](qimgv/distrib/screenshots/qimgv.PNG)] |  [![img2](qimgv/distrib/screenshots/qimgv3.PNG)]| [![img3](qimgv/distrib/screenshots/qimgv2.PNG)]
 
-## New Key features:
+## New key features
 
-- Collage view and collage export
+- **Collage view and export** - arrange several images on one canvas (Mosaic, Grid, Row, Column or Freehand layouts), adjust every tile, and export the result as an image. Open it with __Ctrl+G__. See [Collage](#collage).
 
-- Improved slideshow function
+- **Improved slideshow** - a floating control bar, 13 transition styles (fade, slide, blur, pixel mash, wipe, iris, dissolve...), an adjustable easing curve, duration and strength, and optional file name / date captions. See [Slideshow](#slideshow).
 
-- Added more image format support
+- **More image formats** - WebP, TIFF, TGA, WBMP and ICNS out of the box, plus JPEG-XL, AVIF, APNG, HEIF and RAW through plugins. See [Additional image formats](#additional-image-formats).
 
-- Batch image format convertion
+- **Batch image format conversion** - convert many images to another format in one go.
+
+- **Rulers and guides, top bar** - pixel / % / cm / in rulers with draggable guides, and a slim top bar with the settings menu, zoom level and an optional CPU / RAM readout. See [Top bar](#top-bar).
 
 ## Default control scheme:
 
@@ -93,23 +93,43 @@ Note: you can configure every shortcut by going to __Settings > Controls__
 
 ### Slideshow
 
-Start it with the Slideshow button in the top bar (or the context menu). The top bar, panels and info bars are hidden; moving the mouse shows the slideshow bar (previous / pause / next, timer, transition style, loop, settings gear, Exit). The timer, style and loop are also in __Settings > General > Slideshow__. Editing actions (delete, crop, rename...) are blocked while it runs.
+Start it with the Slideshow button in the top bar (or the context menu). The window is stripped down to the picture: the top bar, panels and info bars are hidden. Move the mouse to bring up the slideshow bar; after a moment without movement the bar and the cursor hide again. The bar has previous / pause / next, the timer, the transition style, Loop, the settings gear and Exit. The timer, style and loop can also be set in __Settings > General > Slideshow__. Editing actions (delete, crop, rename...) are blocked while it runs.
 
-The gear opens the __slideshow settings__ popup above the bar (it closes with Esc or a click outside it; the bar stays visible while it is open):
+#### Slideshow settings
+
+The gear on the bar opens a popup above it. Changes apply immediately. It closes with Esc or a click outside it, and the bar stays visible while it is open. Controls that the chosen transition style does not use are greyed out.
 
 | Option | What it does |
 | ------------- | ------------- |
-| Captions: Name / Date / Text size | file name and modified date shown bottom left; text size 75-300 % |
-| Duration | length of the transition (0.08-3 s, never more than 80 % of the time per slide) |
-| Easing | cubic-bezier graph: drag the two handles for the ease in / ease out (double-click a handle to reset it, overshoot allowed), or pick a preset |
-| Strength | main amount of the effect (blur, pixel size, zoom, travel distance, streak length...) |
-| Softness | feathered edge of Wipe / Iris |
-| Block size | tile size of Dissolve |
-| Direction | Auto (follows next / previous), Left, Right, Up, Down |
-| Dip color | any color for "Dip to color" (picker or Black / White / Accent) |
-| Random style | a different style on every slide |
+| Captions | Shows the file name and / or the date the file was modified, bottom left. __Text size__ scales them from 75 to 300 % |
+| Duration | How long one transition takes, 0.08 - 3 s (capped at 80 % of the time per slide) |
+| Easing | How the transition speeds up and slows down. Pick a preset, or drag the two handles of the curve (double-click a handle to reset it). The curve may overshoot for a springy feel |
+| Strength | The main amount of the effect: blur radius, pixel size, zoom, travel distance, motion trail length... |
+| Softness | Width of the soft edge of Wipe and Iris |
+| Block size | Tile size of Dissolve |
+| Direction | Which way the old slide leaves: Auto (follows next / previous), Left, Right, Up or Down |
+| Dip color | The color __Dip to color__ fades through: any color from the picker, or Black / White / Accent |
+| Random style | Uses a different transition style on every slide (never the same one twice in a row) |
 
-Transition styles: None, Fade, Slide, Zoom, Dip to color, Blur fade, Motion blur, Pixel mash, Push, Cover, Wipe, Iris, Dissolve. Controls that the chosen style does not use are greyed out.
+#### Transition styles
+
+| Style | What it looks like |
+| ------------- | ------------- |
+| None | Instant switch |
+| Fade | The old slide fades into the next one |
+| Slide | The old slide slides away and uncovers the next one |
+| Zoom | The old slide zooms in while it fades out |
+| Dip to color | Fades to a color, then from that color into the next slide |
+| Blur fade | The old slide blurs out while the next one sharpens in |
+| Motion blur | Both slides sweep across the screen with a motion trail |
+| Pixel mash | Both slides break into big pixels and swap at the coarsest point |
+| Push | The next slide pushes the old one out |
+| Cover | The next slide slides in over the old one, which dims |
+| Wipe | A soft edge sweeps across and replaces the old slide |
+| Iris | The next slide opens up from the centre in a growing circle |
+| Dissolve | Random tiles of the old slide fade away |
+
+#### Slideshow keys
 
 | Action (slideshow) | Shortcut |
 | ------------- | ------------- |
@@ -125,7 +145,7 @@ __Settings > General > Interface font__ (default Consolas, falls back to another
 
 ### Collage
 
-Open several images at once with __Ctrl+G__ (or the collage button in the top bar): select 2+ images in folder view first, or pick files in the dialog.
+Combine several images on one canvas and export the result. Open it with __Ctrl+G__ (or the collage button in the top bar): select 2+ images in folder view first, or pick files in the dialog. Choose how the tiles are arranged with the __Layout__ dropdown, then adjust each tile and export.
 Only a few shortcuts work while the collage is open (open, settings, fullscreen, folder view).
 
 | Action (collage view) | Shortcut |
@@ -171,9 +191,9 @@ Only a few shortcuts work while the collage is open (open, settings, fullscreen,
 
 # User interface
 
-The idea is to have a uncluttered, simple and easy to use UI. You can see UI elements only when you need them.
+The idea is to have an uncluttered, simple and easy to use UI. UI elements only show up when you need them.
 
-There is a pull-down panel with thumbnails, as well as folder view. You can also bring up a context menu via right click.
+There is a pull-down panel with thumbnails, as well as a folder view. A context menu is available on right click.
 
 ## Using quick copy / quick move panels
 

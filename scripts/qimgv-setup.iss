@@ -1,9 +1,9 @@
 ; Inno Setup 6 script for the qimgv Windows installer.
-; Build: ISCC /DAppVersion=1.0.5 /DSourceDir=<package dir> /DOutputDir=<out dir> scripts\qimgv-setup.iss
+; Build: ISCC /DAppVersion=1.0.6 /DSourceDir=<package dir> /DOutputDir=<out dir> scripts\qimgv-setup.iss
 ; SourceDir is the output of scripts/package-win-release.sh.
 
 #ifndef AppVersion
-  #define AppVersion "1.0.5"
+  #define AppVersion "1.0.6"
 #endif
 #ifndef SourceDir
   #define SourceDir "..\build\pkg"
