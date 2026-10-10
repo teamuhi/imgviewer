@@ -4,11 +4,11 @@ qimgv version: 1.0.6
 =====
 A fast, lightweight image viewer with a clean, uncluttered interface: panels and bars only show up when you need them. Video playback is optional.
 
-<p align="center"><img src="C:\Users\timoT\Documents\GitHub\imgviewer\qimgv\res\icons\common\logo\app\192.png"></p>
+<p align="center"><img src="qimgv\res\icons\common\logo\app\192.png"></p>
 
 >una
 
-## Screenshots <img src="C:\Users\timoT\Documents\GitHub\imgviewer\qimgv\res\icons\common\logo\app\20.png">
+## Screenshots <img src="qimgv\res\icons\common\logo\app\20.png">
 
 <table>
   <thead>
@@ -27,7 +27,7 @@ A fast, lightweight image viewer with a clean, uncluttered interface: panels and
   </tbody>
 </table>
 
-## New key features <img src="C:\Users\timoT\Documents\GitHub\imgviewer\qimgv\res\icons\common\logo\app\20.png">
+## New key features <img src="qimgv\res\icons\common\logo\app\20.png">
 
 - **Collage view and export** - arrange several images on one canvas (Mosaic, Grid, Row, Column or Freehand layouts), adjust every tile, and export the result as an image. Open it with __Ctrl+G__. See [Collage](#collage).
 
@@ -39,7 +39,7 @@ A fast, lightweight image viewer with a clean, uncluttered interface: panels and
 
 - **Rulers and guides, top bar** - pixel / % / cm / in rulers with draggable guides, and a slim top bar with the settings menu, zoom level and an optional CPU / RAM readout. See [Top bar](#top-bar).
 
-## Default control scheme: <img src="C:\Users\timoT\Documents\GitHub\imgviewer\qimgv\res\icons\common\logo\app\20.png">
+## Default control scheme: <img src="qimgv\res\icons\common\logo\app\20.png">
 
 <table>
   <thead>
@@ -106,7 +106,7 @@ A fast, lightweight image viewer with a clean, uncluttered interface: panels and
 
 Note: you can configure every shortcut by going to __Settings > Controls__
 
-### Top bar <img src="C:\Users\timoT\Documents\GitHub\imgviewer\qimgv\res\icons\common\logo\app\20.png">
+### Top bar <img src="qimgv\res\icons\common\logo\app\20.png">
 
 - The menu row on the left (General, View, Theme, Controls, Scripts, Advanced, About) opens the settings dialog on that page. On narrow windows it collapses into a *Settings* dropdown.
 
@@ -116,11 +116,11 @@ Note: you can configure every shortcut by going to __Settings > Controls__
 
 - The bar can be turned off in __Settings > General > Top bar__ (it is always hidden in fullscreen).
 
-### Slideshow <img src="C:\Users\timoT\Documents\GitHub\imgviewer\qimgv\res\icons\common\logo\app\20.png">
+### Slideshow <img src="qimgv\res\icons\common\logo\app\20.png">
 
 Start it with the Slideshow button in the top bar (or the context menu). The window is stripped down to the picture: the top bar, panels and info bars are hidden. Move the mouse to bring up the slideshow bar; after a moment without movement the bar and the cursor hide again. The bar has previous / pause / next, the timer, the transition style, Loop, the settings gear and Exit. The timer, style and loop can also be set in __Settings > General > Slideshow__. Editing actions (delete, crop, rename...) are blocked while it runs.
 
-#### Slideshow settings <img src="C:\Users\timoT\Documents\GitHub\imgviewer\qimgv\res\icons\common\logo\app\20.png">
+#### Slideshow settings <img src="qimgv\res\icons\common\logo\app\20.png">
 
 The gear on the bar opens a popup above it. Changes apply immediately. It closes with Esc or a click outside it, and the bar stays visible while it is open. Controls that the chosen transition style does not use are greyed out.
 
@@ -144,7 +144,7 @@ The gear on the bar opens a popup above it. Changes apply immediately. It closes
   </tbody>
 </table>
 
-#### Transition styles <img src="C:\Users\timoT\Documents\GitHub\imgviewer\qimgv\res\icons\common\logo\app\20.png">
+#### Transition styles <img src="qimgv\res\icons\common\logo\app\20.png">
 
 <table>
   <thead>
@@ -170,7 +170,7 @@ The gear on the bar opens a popup above it. Changes apply immediately. It closes
   </tbody>
 </table>
 
-#### Slideshow keys <img src="C:\Users\timoT\Documents\GitHub\imgviewer\qimgv\res\icons\common\logo\app\20.png">
+#### Slideshow keys <img src="qimgv\res\icons\common\logo\app\20.png">
 
 <table>
   <thead>
@@ -188,11 +188,11 @@ The gear on the bar opens a popup above it. Changes apply immediately. It closes
   </tbody>
 </table>
 
-### Interface font <img src="C:\Users\timoT\Documents\GitHub\imgviewer\qimgv\res\icons\common\logo\app\20.png">
+### Interface font <img src="qimgv\res\icons\common\logo\app\20.png">
 
 __Settings > General > Interface font__ (default Consolas, falls back to another monospace font when Consolas is not installed). Applied right away.
 
-### Collage <img src="C:\Users\timoT\Documents\GitHub\imgviewer\qimgv\res\icons\common\logo\app\20.png">
+### Collage <img src="qimgv\res\icons\common\logo\app\20.png">
 
 Combine several images on one canvas and export the result. Open it with __Ctrl+G__ (or the collage button in the top bar): select 2+ images in folder view first, or pick files in the dialog. Choose how the tiles are arranged with the __Layout__ dropdown, then adjust each tile and export.
 Only a few shortcuts work while the collage is open (open, settings, fullscreen, folder view).
@@ -254,13 +254,13 @@ Only a few shortcuts work while the collage is open (open, settings, fullscreen,
   </tbody>
 </table>
 
-# User interface <img src="C:\Users\timoT\Documents\GitHub\imgviewer\qimgv\res\icons\common\logo\app\20.png">
+# User interface <img src="qimgv\res\icons\common\logo\app\20.png">
 
 The idea is to have an uncluttered, simple and easy to use UI. UI elements only show up when you need them.
 
 There is a pull-down panel with thumbnails, as well as a folder view. A context menu is available on right click.
 
-## Using quick copy / quick move panels <img src="C:\Users\timoT\Documents\GitHub\imgviewer\qimgv\res\icons\common\logo\app\20.png">
+## Using quick copy / quick move panels <img src="qimgv\res\icons\common\logo\app\20.png">
 
 Bring up the panel with C or M shortcut. You will see 9 destination directories, click on the folder icon to change them.
 
@@ -268,7 +268,7 @@ With panel visible, use 1 - 9 keys to copy/move current image to corresponding d
 
 When you are done press C or M again to hide the panel.
 
-## Running scripts <img src="C:\Users\timoT\Documents\GitHub\imgviewer\qimgv\res\icons\common\logo\app\20.png">
+## Running scripts <img src="qimgv\res\icons\common\logo\app\20.png">
 
 You can run custom scripts on a current image.
 
@@ -287,7 +287,7 @@ _Note: The script file must be an executable. Also, "shebang" (`#!/bin/bash`) ne
 
 When you've created your script go to __Settings > Controls > Add__, then select it and assign a shortcut like for any regular action.
 
-## HiDPI (Linux / MacOS only) <img src="C:\Users\timoT\Documents\GitHub\imgviewer\qimgv\res\icons\common\logo\app\20.png">
+## HiDPI (Linux / MacOS only) <img src="qimgv\res\icons\common\logo\app\20.png">
 
 If qimgv appears too small / too big on your display, you can override the scale factor. Example:
 ```
@@ -297,11 +297,11 @@ You can put it in `qimgv.desktop` file to make it permanent. Using values less t
 
 qimgv should also obey the global scale factor set in KDE's systemsettings.
 
-## High quality scaling <img src="C:\Users\timoT\Documents\GitHub\imgviewer\qimgv\res\icons\common\logo\app\20.png">
+## High quality scaling <img src="qimgv\res\icons\common\logo\app\20.png">
 
 qimgv supports nicer scaling filters when compiled with `opencv` support (ON by default, but might vary depending on your linux distribution). Filter options are available in __Settings > Scaling__. `Bicubic` or `bilinear+sharpen` is recommended.
 
-# Additional image formats <img src="C:\Users\timoT\Documents\GitHub\imgviewer\qimgv\res\icons\common\logo\app\20.png">
+# Additional image formats <img src="qimgv\res\icons\common\logo\app\20.png">
 
 Built-in Qt plugins cover JPEG, PNG, GIF, BMP, ICO, SVG, WebP, TIFF, TGA, WBMP and ICNS (WebP / TIFF / TGA / WBMP / ICNS come from `qt6-imageformats`, which `deploy.ps1` copies next to the exe).
 
@@ -325,9 +325,9 @@ qimgv can open some extra formats via third-party image plugins. All of them are
   </tbody>
 </table>
 
-# Installation <img src="C:\Users\timoT\Documents\GitHub\imgviewer\qimgv\res\icons\common\logo\app\20.png">
+# Installation <img src="qimgv\res\icons\common\logo\app\20.png">
 
-## Windows <img src="C:\Users\timoT\Documents\GitHub\imgviewer\qimgv\res\icons\common\logo\app\20.png">
+## Windows <img src="qimgv\res\icons\common\logo\app\20.png">
 
   Download `qimgv-setup-<version>-x64.exe` from the [releases page](https://github.com/teamuhi/imgviewer/releases) and run it. The installer:
   - installs to `Program Files\qimgv` (or per-user, via the "only for me" choice), upgrades in place and uninstalls cleanly (your settings in `%AppData%` are kept);
@@ -340,9 +340,9 @@ qimgv can open some extra formats via third-party image plugins. All of them are
 
   _Making qimgv the default viewer:_ Windows does not let an installer do that silently. Open __Settings > Apps > Default apps__, search for qimgv and pick it for the formats you want (or right-click an image > Open with > Choose another app > Always).
 
-## GNU+Linux <img src="C:\Users\timoT\Documents\GitHub\imgviewer\qimgv\res\icons\common\logo\app\20.png">
+## GNU+Linux <img src="qimgv\res\icons\common\logo\app\20.png">
 
-### Arch Linux / Manjaro / etc. <img src="C:\Users\timoT\Documents\GitHub\imgviewer\qimgv\res\icons\common\logo\app\20.png">
+### Arch Linux / Manjaro / etc. <img src="qimgv\res\icons\common\logo\app\20.png">
 
 AUR package: 
 
@@ -350,45 +350,45 @@ AUR package:
 qimgv-git
 ```
   
-### Ubuntu / Linux Mint / Pop!\_OS / etc. <img src="C:\Users\timoT\Documents\GitHub\imgviewer\qimgv\res\icons\common\logo\app\20.png">
+### Ubuntu / Linux Mint / Pop!\_OS / etc. <img src="qimgv\res\icons\common\logo\app\20.png">
 
 ```
 sudo apt install qimgv
 ```
 
-### Fedora <img src="C:\Users\timoT\Documents\GitHub\imgviewer\qimgv\res\icons\common\logo\app\20.png">
+### Fedora <img src="qimgv\res\icons\common\logo\app\20.png">
 
 ```
 sudo dnf install qimgv
 ```
 
-### OpenSUSE <img src="C:\Users\timoT\Documents\GitHub\imgviewer\qimgv\res\icons\common\logo\app\20.png">
+### OpenSUSE <img src="qimgv\res\icons\common\logo\app\20.png">
 
 ```
 zypper install qimgv
 ```
 
-### Gentoo <img src="C:\Users\timoT\Documents\GitHub\imgviewer\qimgv\res\icons\common\logo\app\20.png">
+### Gentoo <img src="qimgv\res\icons\common\logo\app\20.png">
 
 ```
 emerge qimgv
 ```
 
-### Void linux <img src="C:\Users\timoT\Documents\GitHub\imgviewer\qimgv\res\icons\common\logo\app\20.png">
+### Void linux <img src="qimgv\res\icons\common\logo\app\20.png">
 
 ```
 xbps-install -S qimgv
 ```
 
-### Alpine Linux <img src="C:\Users\timoT\Documents\GitHub\imgviewer\qimgv\res\icons\common\logo\app\20.png">
+### Alpine Linux <img src="qimgv\res\icons\common\logo\app\20.png">
 
 ```
 apk add qimgv
 ```
 
-## BSD <img src="C:\Users\timoT\Documents\GitHub\imgviewer\qimgv\res\icons\common\logo\app\20.png">
+## BSD <img src="qimgv\res\icons\common\logo\app\20.png">
 
-### FreeBSD <img src="C:\Users\timoT\Documents\GitHub\imgviewer\qimgv\res\icons\common\logo\app\20.png">
+### FreeBSD <img src="qimgv\res\icons\common\logo\app\20.png">
 
 ```
 pkg install qimgv
@@ -396,7 +396,7 @@ pkg install qimgv
 
 This list may be incomplete. 
 
-## Compiling from source <img src="C:\Users\timoT\Documents\GitHub\imgviewer\qimgv\res\icons\common\logo\app\20.png">
+## Compiling from source <img src="qimgv\res\icons\common\logo\app\20.png">
 
 See [Compiling qimgv from source](https://github.com/easymodo/qimgv/wiki/Compiling-qimgv-from-source) on the wiki
 
