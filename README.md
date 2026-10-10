@@ -10,7 +10,7 @@ Image viewer. Fast, easy to use. Optional video support.
 
 Main window & panel        |  Collage view   |  Settings window  
 :-------------------------:|:-------------------------:|:-------------------------:|
-[![img1](qimgv/distrib/screenshots/qimgv.PNG)] |  [![img2](qimgv/distrib/screenshots/qimgv3.PNG)]| [![img3](qimgv/distrib/screenshots/qimgv2.PNG)]
+[img1](qimgv/distrib/screenshots/qimgv.PNG) |  [img2](qimgv/distrib/screenshots/qimgv3.PNG)| [img3](qimgv/distrib/screenshots/qimgv2.PNG)
 
 ## New Key features:
 
